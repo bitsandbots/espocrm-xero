@@ -15,7 +15,7 @@ Conflict resolution uses last-modified-wins: whichever record was modified more 
 
 ## Requirements
 
-- EspoCRM 7.x or later
+- EspoCRM 9.x or later
 - A Xero organisation (any paid plan, or free trial)
 - A developer app at [developer.xero.com](https://developer.xero.com) (free)
 - PHP `curl` extension enabled

@@ -119,15 +119,23 @@ _blue "Running system rebuild..."
 
 cd "$ESPO_PATH"
 
-if php command.php rebuild 2>&1 | grep -q "Rebuild succeeded"; then
+REBUILD_OUTPUT=$(php command.php rebuild 2>&1)
+REBUILD_EXIT=$?
+
+if [[ $REBUILD_EXIT -eq 0 ]]; then
   _green "  Rebuild succeeded"
 else
-  _red "ERROR: Rebuild failed — check EspoCRM logs for details"
+  _red "ERROR: Rebuild failed (exit $REBUILD_EXIT)"
+  echo "$REBUILD_OUTPUT"
+  _yellow "Check EspoCRM logs: $ESPO_PATH/data/logs/espo.log"
   exit 1
 fi
 
-php command.php clear-cache
-_green "  Cache cleared"
+if php command.php clear-cache 2>&1; then
+  _green "  Cache cleared"
+else
+  _yellow "WARNING: Cache clear returned non-zero; this may be harmless."
+fi
 
 ##############################################################################
 # POST-INSTALL INSTRUCTIONS

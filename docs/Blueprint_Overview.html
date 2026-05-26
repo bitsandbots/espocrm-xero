@@ -1,0 +1,1358 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>EspoCRM | Xero — Integration Blueprint</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Exo+2:wght@400;600;700;800&family=Plus+Jakarta+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --navy:   #0d1421;
+    --navy-2: #111d30;
+    --silver: #e9edf2;
+    --silver-2: #f4f6f9;
+    --blue:   #2b7de9;
+    --orange: #e07018;
+    --text:   #1a2236;
+    --muted:  #6b7a99;
+    --border: #d0d7e4;
+    --code-bg: #1e2840;
+    --success: #1e8a4a;
+    --warn:    #b85c00;
+    --bar: linear-gradient(90deg, var(--blue), var(--orange));
+    --font-display: 'Exo 2', sans-serif;
+    --font-body: 'Plus Jakarta Sans', sans-serif;
+    --font-mono: 'IBM Plex Mono', monospace;
+  }
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  html { scroll-behavior: smooth; }
+  body {
+    font-family: var(--font-body);
+    font-size: 14px;
+    line-height: 1.65;
+    color: var(--text);
+    background: var(--silver);
+    display: flex;
+    min-height: 100vh;
+  }
+
+  /* ── Topbar ── */
+  .topbar {
+    position: fixed; top: 0; left: 0; right: 0; z-index: 100;
+    height: 52px;
+    background: var(--navy);
+    display: flex; align-items: center; padding: 0 24px;
+    box-shadow: 0 1px 8px rgba(0,0,0,.4);
+  }
+  .topbar-brand {
+    font-family: var(--font-display);
+    font-size: 17px; font-weight: 800;
+    letter-spacing: .3px;
+    color: #fff;
+  }
+  .topbar-brand span { color: var(--orange); }
+  .topbar-tag {
+    margin-left: 14px;
+    font-size: 11px; font-weight: 600;
+    letter-spacing: .8px; text-transform: uppercase;
+    color: var(--muted);
+  }
+  .topbar-right {
+    margin-left: auto;
+    font-size: 12px; color: var(--muted);
+    font-family: var(--font-mono);
+  }
+  .topbar-right span { color: var(--blue); }
+
+  /* ── Sidebar ── */
+  .sidebar {
+    position: fixed; top: 52px; left: 0; bottom: 0;
+    width: 230px;
+    background: var(--navy-2);
+    overflow-y: auto;
+    padding: 20px 0 40px;
+    border-right: 1px solid rgba(255,255,255,.06);
+  }
+  .nav-group {
+    margin-bottom: 6px;
+  }
+  .nav-group-label {
+    font-family: var(--font-mono);
+    font-size: 10px; font-weight: 500;
+    letter-spacing: 1.2px; text-transform: uppercase;
+    color: var(--muted);
+    padding: 12px 20px 6px;
+  }
+  .nav-link {
+    display: block;
+    padding: 7px 20px 7px 28px;
+    font-size: 13px; font-weight: 500;
+    color: #a8b4cc;
+    text-decoration: none;
+    border-left: 2px solid transparent;
+    transition: all .15s;
+  }
+  .nav-link:hover { color: #fff; background: rgba(255,255,255,.04); }
+  .nav-link.active { color: var(--blue); border-left-color: var(--blue); background: rgba(43,125,233,.08); }
+
+  /* ── Main content ── */
+  .main {
+    margin-left: 230px;
+    margin-top: 52px;
+    flex: 1;
+    padding: 36px 44px 80px;
+    max-width: 960px;
+  }
+
+  /* ── Section headings ── */
+  .section {
+    margin-bottom: 52px;
+    scroll-margin-top: 72px;
+  }
+  .section-title {
+    font-family: var(--font-display);
+    font-size: 22px; font-weight: 700;
+    color: var(--text);
+    margin-bottom: 18px;
+    padding-bottom: 10px;
+    border-bottom: 2px solid var(--border);
+    position: relative;
+  }
+  .section-title::after {
+    content: '';
+    position: absolute; bottom: -2px; left: 0;
+    width: 56px; height: 2px;
+    background: var(--bar);
+  }
+  h3 {
+    font-family: var(--font-display);
+    font-size: 16px; font-weight: 600;
+    margin: 26px 0 10px;
+    color: var(--text);
+  }
+  h4 {
+    font-family: var(--font-display);
+    font-size: 14px; font-weight: 600;
+    margin: 20px 0 8px;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: .5px;
+  }
+  p { margin-bottom: 12px; }
+  ul, ol { padding-left: 20px; margin-bottom: 12px; }
+  li { margin-bottom: 4px; }
+  strong { font-weight: 600; }
+  a { color: var(--blue); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+
+  /* ── Cards ── */
+  .card {
+    background: #fff;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    overflow: hidden;
+    margin-bottom: 20px;
+  }
+  .card::before {
+    content: ''; display: block;
+    height: 3px; background: var(--bar);
+  }
+  .card-body { padding: 20px 22px; }
+  .card-title {
+    font-family: var(--font-display);
+    font-size: 14px; font-weight: 700;
+    margin-bottom: 8px;
+    color: var(--text);
+  }
+
+  /* ── Overview stat grid ── */
+  .stat-grid {
+    display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px;
+    margin-bottom: 28px;
+  }
+  .stat {
+    background: #fff; border: 1px solid var(--border); border-radius: 6px;
+    padding: 18px 16px; text-align: center; position: relative; overflow: hidden;
+  }
+  .stat::before { content:''; display:block; height:3px; background:var(--bar); position:absolute; top:0; left:0; right:0; }
+  .stat-num {
+    font-family: var(--font-display);
+    font-size: 28px; font-weight: 800;
+    color: var(--blue);
+    line-height: 1;
+    margin-bottom: 4px;
+  }
+  .stat-label { font-size: 11px; color: var(--muted); font-weight: 500; text-transform: uppercase; letter-spacing: .6px; }
+
+  /* ── Tables ── */
+  table { width: 100%; border-collapse: collapse; margin-bottom: 20px; }
+  th {
+    text-align: left;
+    padding: 9px 14px;
+    background: var(--navy);
+    color: #c8d0df;
+    font-family: var(--font-mono);
+    font-size: 11px; font-weight: 500;
+    letter-spacing: .6px; text-transform: uppercase;
+  }
+  td { padding: 9px 14px; border-bottom: 1px solid var(--border); font-size: 13px; }
+  tr:last-child td { border-bottom: none; }
+  tr:nth-child(even) td { background: var(--silver-2); }
+  .badge {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 10px;
+    font-size: 11px; font-weight: 600;
+    font-family: var(--font-mono);
+  }
+  .badge-blue   { background: #dbeafe; color: #1e40af; }
+  .badge-green  { background: #dcfce7; color: #166534; }
+  .badge-orange { background: #fed7aa; color: #9a3412; }
+  .badge-red    { background: #fee2e2; color: #991b1b; }
+  .badge-gray   { background: #f1f5f9; color: #475569; }
+
+  /* ── Code blocks ── */
+  pre {
+    background: var(--code-bg);
+    color: #c8d8f0;
+    font-family: var(--font-mono);
+    font-size: 12.5px;
+    line-height: 1.55;
+    padding: 18px 20px;
+    border-radius: 6px;
+    overflow-x: auto;
+    margin-bottom: 16px;
+    border: 1px solid rgba(255,255,255,.06);
+  }
+  code {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    background: rgba(43,125,233,.1);
+    color: var(--blue);
+    padding: 1px 5px;
+    border-radius: 3px;
+  }
+  pre code { background: none; color: inherit; padding: 0; font-size: inherit; }
+  .kw  { color: #7dd3fc; }
+  .str { color: #86efac; }
+  .cmt { color: #64748b; }
+  .num { color: #fbbf24; }
+  .cls { color: #f0abfc; }
+
+  /* ── Flow diagram ── */
+  .flow {
+    background: var(--code-bg);
+    color: #94a3b8;
+    font-family: var(--font-mono);
+    font-size: 12px;
+    line-height: 1.8;
+    padding: 20px 24px;
+    border-radius: 6px;
+    margin-bottom: 16px;
+    border: 1px solid rgba(255,255,255,.06);
+    white-space: pre;
+  }
+  .flow .hi { color: var(--blue); }
+  .flow .hl { color: var(--orange); }
+
+  /* ── Alert boxes ── */
+  .alert {
+    padding: 12px 16px;
+    border-radius: 5px;
+    margin-bottom: 14px;
+    font-size: 13px;
+    border-left: 3px solid;
+  }
+  .alert-info   { background: #eff6ff; border-color: var(--blue); color: #1e3a5f; }
+  .alert-warn   { background: #fff7ed; border-color: var(--orange); color: #7c2d12; }
+  .alert-ok     { background: #f0fdf4; border-color: var(--success); color: #14532d; }
+  .alert strong { font-weight: 700; }
+
+  /* ── File tree ── */
+  .filetree {
+    background: var(--code-bg);
+    color: #94a3b8;
+    font-family: var(--font-mono);
+    font-size: 12px;
+    line-height: 1.8;
+    padding: 18px 22px;
+    border-radius: 6px;
+    margin-bottom: 16px;
+    white-space: pre;
+  }
+  .filetree .dir  { color: #93c5fd; }
+  .filetree .file { color: #d1d5db; }
+  .filetree .note { color: #64748b; }
+
+  /* ── Gap severity ── */
+  .sev-critical { color: #991b1b; font-weight: 700; }
+  .sev-high     { color: #9a3412; font-weight: 700; }
+  .sev-medium   { color: #78350f; }
+  .sev-low      { color: #374151; }
+  .status-resolved { color: var(--success); }
+  .status-open     { color: #b45309; }
+  .status-deferred { color: var(--muted); }
+
+  /* ── Scrollbar ── */
+  .sidebar::-webkit-scrollbar { width: 4px; }
+  .sidebar::-webkit-scrollbar-track { background: transparent; }
+  .sidebar::-webkit-scrollbar-thumb { background: rgba(255,255,255,.1); border-radius: 4px; }
+
+  @media (max-width: 900px) {
+    .sidebar { display: none; }
+    .main { margin-left: 0; padding: 24px 20px 60px; }
+    .stat-grid { grid-template-columns: repeat(2, 1fr); }
+  }
+</style>
+</head>
+<body>
+
+<!-- Topbar -->
+<header class="topbar">
+  <div class="topbar-brand">Core<span>Conduit</span></div>
+  <div class="topbar-tag">/ EspoCRM Xero Integration</div>
+  <div class="topbar-right">v<span>1.0.0</span> &nbsp;·&nbsp; EspoCRM <span>9.x</span> &nbsp;·&nbsp; PHP <span>8.3+</span></div>
+</header>
+
+<!-- Sidebar -->
+<nav class="sidebar">
+  <div class="nav-group">
+    <div class="nav-group-label">Overview</div>
+    <a class="nav-link" href="#overview">Project Overview</a>
+    <a class="nav-link" href="#tech-stack">Tech Stack</a>
+  </div>
+  <div class="nav-group">
+    <div class="nav-group-label">Architecture</div>
+    <a class="nav-link" href="#arch-module">Module Structure</a>
+    <a class="nav-link" href="#arch-push">Push Flow (Hooks)</a>
+    <a class="nav-link" href="#arch-pull">Pull Flow (Jobs)</a>
+    <a class="nav-link" href="#arch-oauth">OAuth 2.0 Flow</a>
+    <a class="nav-link" href="#arch-conflict">Conflict Resolution</a>
+    <a class="nav-link" href="#arch-tokens">Token Storage</a>
+  </div>
+  <div class="nav-group">
+    <div class="nav-group-label">Setup</div>
+    <a class="nav-link" href="#setup-prereqs">Prerequisites</a>
+    <a class="nav-link" href="#setup-install">Installation</a>
+    <a class="nav-link" href="#setup-https">HTTPS / TLS</a>
+    <a class="nav-link" href="#setup-xero">Xero App Config</a>
+    <a class="nav-link" href="#setup-cron">Cron &amp; Jobs</a>
+  </div>
+  <div class="nav-group">
+    <div class="nav-group-label">API Reference</div>
+    <a class="nav-link" href="#api-xero-service">XeroService</a>
+    <a class="nav-link" href="#api-controller">Controller</a>
+    <a class="nav-link" href="#api-entrypoint">OAuth Callback</a>
+    <a class="nav-link" href="#api-jobs">Background Jobs</a>
+    <a class="nav-link" href="#api-schema">Data Schema</a>
+    <a class="nav-link" href="#api-frontend">Frontend View</a>
+  </div>
+  <div class="nav-group">
+    <div class="nav-group-label">Operations</div>
+    <a class="nav-link" href="#ops-testing">Testing</a>
+    <a class="nav-link" href="#ops-cli">CLI Reference</a>
+    <a class="nav-link" href="#ops-logs">Logs &amp; Debug</a>
+    <a class="nav-link" href="#ops-troubleshoot">Troubleshooting</a>
+  </div>
+  <div class="nav-group">
+    <div class="nav-group-label">Roadmap</div>
+    <a class="nav-link" href="#gaps">Gap Analysis</a>
+  </div>
+</nav>
+
+<!-- Main content -->
+<main class="main">
+
+<!-- ================================================================ OVERVIEW -->
+<section class="section" id="overview">
+  <div class="section-title">Project Overview</div>
+
+  <div class="stat-grid">
+    <div class="stat">
+      <div class="stat-num">3</div>
+      <div class="stat-label">Entity Types Synced</div>
+    </div>
+    <div class="stat">
+      <div class="stat-num">2</div>
+      <div class="stat-label">Sync Jobs</div>
+    </div>
+    <div class="stat">
+      <div class="stat-num">87</div>
+      <div class="stat-label">Unit Tests</div>
+    </div>
+    <div class="stat">
+      <div class="stat-num">v1</div>
+      <div class="stat-label">Release</div>
+    </div>
+  </div>
+
+  <p>
+    <strong>espocrm-xero</strong> is an open-source EspoCRM module that provides bidirectional
+    sync between EspoCRM and Xero Accounting. It follows the EspoCRM extension pattern
+    (<code>custom/Espo/Modules/</code>) and modifies zero core files — all logic is
+    contained within the module directory.
+  </p>
+
+  <div class="card">
+    <div class="card-body">
+      <div class="card-title">What Syncs</div>
+      <table>
+        <thead><tr><th>EspoCRM</th><th>Xero</th><th>Direction</th><th>Trigger</th></tr></thead>
+        <tbody>
+          <tr><td>Account</td><td>Contact</td><td><span class="badge badge-blue">→ Push</span></td><td>afterSave hook, Reconcile job</td></tr>
+          <tr><td>Contact</td><td>Contact</td><td><span class="badge badge-blue">→ Push</span></td><td>afterSave hook, Reconcile job</td></tr>
+          <tr><td>Account / Contact</td><td>Contact updates</td><td><span class="badge badge-orange">← Pull</span></td><td>SyncFromXero nightly job</td></tr>
+          <tr><td>Invoice (custom)</td><td>Invoice (ACCREC)</td><td><span class="badge badge-blue">→ Push</span></td><td>afterSave hook, Reconcile job</td></tr>
+          <tr><td>Invoice.status → Paid</td><td>Payment received</td><td><span class="badge badge-orange">← Pull</span></td><td>SyncFromXero nightly job</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-body">
+      <div class="card-title">Design Principles</div>
+      <ul>
+        <li><strong>No core modifications</strong> — zero edits to EspoCRM core; 100% isolated in <code>custom/</code></li>
+        <li><strong>EspoCRM as CRM source of truth</strong> — Xero is authoritative only for payments</li>
+        <li><strong>Last-modified-wins conflict resolution</strong> — ties go to EspoCRM</li>
+        <li><strong>Hook loop guard</strong> — <code>skipXeroSync</code> save option prevents infinite re-entry</li>
+        <li><strong>Graceful degradation</strong> — API failures are logged but never abort a CRM save</li>
+        <li><strong>Stateless jobs</strong> — jobs use <code>lastSyncAt</code> from the Integration entity for watermarking</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<!-- ================================================================ TECH STACK -->
+<section class="section" id="tech-stack">
+  <div class="section-title">Tech Stack</div>
+
+  <table>
+    <thead><tr><th>Layer</th><th>Technology</th><th>Version</th><th>Notes</th></tr></thead>
+    <tbody>
+      <tr><td>CRM Platform</td><td>EspoCRM</td><td>9.x</td><td>Module extension pattern</td></tr>
+      <tr><td>Server Language</td><td>PHP</td><td>8.3+</td><td>Constructor property promotion, enums, fibers</td></tr>
+      <tr><td>PHP Extensions</td><td>curl, pdo_mysql, json, mbstring, openssl, zip</td><td>—</td><td>Required by EspoCRM + module</td></tr>
+      <tr><td>Database</td><td>MySQL / MariaDB</td><td>8.0 / 10.3+</td><td>Or PostgreSQL 15+</td></tr>
+      <tr><td>Web Server</td><td>nginx / Apache</td><td>—</td><td>URL rewriting; nginx preferred</td></tr>
+      <tr><td>Frontend</td><td>JavaScript (AMD)</td><td>ES2022</td><td>Transpiled from source via EspoCRM's JS build pipeline</td></tr>
+      <tr><td>Frontend Build</td><td>Node.js / npm</td><td>22</td><td>Only needed at build time for transpilation</td></tr>
+      <tr><td>Testing</td><td>PHPUnit</td><td>10.x</td><td>Sourced from EspoCRM's vendor directory</td></tr>
+      <tr><td>External API</td><td>Xero Accounting API v2.0</td><td>REST/JSON</td><td><code>api.xero.com/api.xro/2.0</code></td></tr>
+      <tr><td>Auth Protocol</td><td>OAuth 2.0 Authorization Code</td><td>PKCE-less</td><td>Xero identity server</td></tr>
+      <tr><td>Runtime</td><td>Cron + EspoCRM Job Dispatcher</td><td>—</td><td>1-minute cron cadence; jobs fired on schedule</td></tr>
+    </tbody>
+  </table>
+</section>
+
+<!-- ================================================================ MODULE STRUCTURE -->
+<section class="section" id="arch-module">
+  <div class="section-title">Module Structure</div>
+
+  <div class="filetree"><span class="dir">custom/Espo/Modules/Xero/</span>
+<span class="dir">├── Controllers/</span>
+<span class="file">│   └── XeroIntegration.php</span>     <span class="note">POST initOAuth, POST runSync</span>
+<span class="dir">├── EntryPoints/</span>
+<span class="file">│   └── XeroOauthCallback.php</span>    <span class="note">?entryPoint=XeroOauthCallback (no auth required)</span>
+<span class="dir">├── Hooks/</span>
+<span class="dir">│   ├── Account/</span>
+<span class="file">│   │   └── XeroSync.php</span>          <span class="note">afterSave → upsertContact('Account', ...)</span>
+<span class="dir">│   ├── Contact/</span>
+<span class="file">│   │   └── XeroSync.php</span>          <span class="note">afterSave → upsertContact('Contact', ...)</span>
+<span class="dir">│   └── Invoice/</span>
+<span class="file">│       └── XeroSync.php</span>          <span class="note">afterSave → upsertInvoice or voidInvoice</span>
+<span class="dir">├── Jobs/</span>
+<span class="file">│   ├── SyncFromXero.php</span>          <span class="note">Nightly pull: contacts + payments</span>
+<span class="file">│   └── ReconcileXero.php</span>         <span class="note">Nightly push: unsynced + modified records (batch 25)</span>
+<span class="dir">├── Services/</span>
+<span class="file">│   └── XeroService.php</span>           <span class="note">All Xero API calls, token refresh, field mapping</span>
+<span class="dir">├── Tools/</span>
+<span class="file">│   └── ConflictResolver.php</span>      <span class="note">Last-modified-wins, pure function, no I/O</span>
+<span class="dir">└── Resources/</span>
+<span class="dir">    ├── metadata/</span>
+<span class="file">    │   ├── app/scheduledJobs.json</span> <span class="note">Registers SyncFromXero + ReconcileXero in admin UI</span>
+<span class="file">    │   ├── clientDefs/{Account,Contact,Invoice}.json</span>
+<span class="file">    │   ├── entityDefs/{Account,Contact,Invoice}.json</span>
+<span class="file">    │   ├── integrations/Xero.json</span> <span class="note">Integration form fields + view binding</span>
+<span class="file">    │   └── scopes/Invoice.json</span>
+<span class="file">    ├── layouts/Invoice/{detail,edit,list,filters}.json</span>
+<span class="file">    ├── routes.json</span>               <span class="note">API route declarations</span>
+<span class="file">    ├── module.json</span>               <span class="note">order: 16, jsTranspiled: true</span>
+<span class="file">    └── i18n/en_US/{Integration,Invoice}.json</span>
+
+<span class="dir">client/custom/modules/xero/</span>
+<span class="dir">├── src/views/admin/integrations/</span>
+<span class="file">│   └── xero.js</span>                   <span class="note">Connect + RunSync buttons; connection status panel</span>
+<span class="dir">├── src/views/panels/</span>
+<span class="file">│   └── xero-status.js</span>           <span class="note">Xero status side panel on Account/Contact detail</span>
+<span class="dir">├── lib/transpiled/src/</span>           <span class="note">Compiled AMD output (auto-generated at build time)</span>
+<span class="file">└── res/templates/panels/</span>
+<span class="file">    └── xero-status.tpl</span>           <span class="note">Handlebars template for status panel</span>
+
+<span class="dir">tests/unit/Espo/Modules/Xero/</span>
+<span class="file">├── ConflictResolverTest.php</span>
+<span class="file">├── HooksSyncTest.php</span>
+<span class="file">├── ReconcileXeroTest.php</span>
+<span class="file">├── SyncFromXeroTest.php</span>
+<span class="file">├── XeroIntegrationControllerTest.php</span>
+<span class="file">├── XeroOauthCallbackTest.php</span>
+<span class="file">├── XeroServiceFieldMappingTest.php</span>
+<span class="file">├── XeroServiceHttpTest.php</span>
+<span class="file">└── XeroServicePullTest.php</span></div>
+</section>
+
+<!-- ================================================================ PUSH FLOW -->
+<section class="section" id="arch-push">
+  <div class="section-title">Push Flow (Real-Time via Hooks)</div>
+
+  <p>
+    When any Account, Contact, or Invoice is saved in EspoCRM, an <code>afterSave</code> hook
+    immediately pushes the change to Xero. The hook fires at priority <code>order = 20</code>
+    (after EspoCRM's own hooks).
+  </p>
+
+  <div class="flow"><span class="hi">User clicks Save</span>
+       ↓
+<span class="hi">EspoCRM ORM.saveEntity()</span>
+       ↓
+Fire afterSave hooks (order 20)
+       ↓
+<span class="hi">XeroSync::afterSave()</span>
+       ↓
+Check <span class="hl">skipXeroSync</span> option → if set, return (loop guard)
+       ↓
+<span class="hi">XeroService::upsertContact() / upsertInvoice()</span>
+       ↓
+<span class="hi">getAccessToken()</span> → refresh if expiring within 30s
+       ↓
+HTTP POST to Xero API
+       ↓
+On success: write back xeroContactId / xeroInvoiceId
+  → saveEntity(entity, ['<span class="hl">skipXeroSync</span>' => true]) ← prevents re-entry
+       ↓
+On failure: log warning at WARNING level
+  → CRM save still completes (Xero failure is non-blocking)</div>
+
+  <div class="alert alert-info">
+    <strong>Loop Guard:</strong> All internal saves after sync include <code>'skipXeroSync' => true</code>
+    in the save options. Hooks check this flag before executing, preventing infinite re-entry.
+  </div>
+
+  <div class="alert alert-warn">
+    <strong>Invoice Prerequisite:</strong> Invoice sync requires the linked Account to have
+    a <code>xeroContactId</code> already populated. Save the Account first if it is new.
+    The nightly Reconcile job handles any invoices that fail this check.
+  </div>
+</section>
+
+<!-- ================================================================ PULL FLOW -->
+<section class="section" id="arch-pull">
+  <div class="section-title">Pull Flow (Nightly Background Jobs)</div>
+
+  <h3>SyncFromXero — Daily Pull</h3>
+  <p>Runs at 2:00 AM daily. Fetches all Xero contacts and payments updated since <code>lastSyncAt</code>.
+  On first run, defaults to the past 7 days.</p>
+
+  <div class="flow"><span class="hi">SyncFromXero.run()</span>
+       ↓
+Read <span class="hi">lastSyncAt</span> from Integration entity
+(default: now − 7 days on first run)
+       ↓
+<span class="hi">GET /Contacts?If-Modified-Since={lastSyncAt}</span>
+       ↓
+For each Xero contact:
+  → Find EspoCRM Account / Contact by xeroContactId
+  → ConflictResolver: is Xero newer than xeroSyncedAt?
+  → If yes: update name, email, phone → save(skipXeroSync=true)
+       ↓
+<span class="hi">GET /Payments?where=Date>=DateTime({lastSyncAt})</span>
+       ↓
+For each payment:
+  → Find EspoCRM Invoice by xeroInvoiceId
+  → Set status=Paid, store xeroPaymentId + xeroPaymentDate
+  → save(skipXeroSync=true)
+       ↓
+Write <span class="hi">lastSyncAt = now()</span> to Integration entity</div>
+
+  <h3>ReconcileXero — Nightly Push</h3>
+  <p>Runs at 2:15 AM daily (15 min after SyncFromXero). Pushes any EspoCRM records
+  that Xero has not yet received. Processes a maximum of <strong>25 records per run</strong>
+  to stay within Xero's 60 requests/minute rate limit.</p>
+
+  <div class="flow"><span class="hi">ReconcileXero.run()</span>
+       ↓
+Query Accounts WHERE xeroContactId IS NULL (never synced)
+  → upsertContact() for each (batch 25)
+       ↓
+Query Accounts WHERE xeroContactId IS NOT NULL
+  → For each: if modifiedAt > xeroSyncedAt → upsertContact()
+       ↓
+Query Invoices WHERE status NOT IN (Paid, Voided) AND xeroInvoiceId IS NOT NULL
+  → For each: if modifiedAt > xeroSyncedAt → upsertInvoice()
+       ↓
+Write lastSyncError (null on success, error list on failure)</div>
+
+  <div class="alert alert-info">
+    <strong>Rate Limiting:</strong> Xero enforces 60 API requests/minute per organisation.
+    The 25-record batch cap leaves headroom for push hooks firing in the same window.
+    Large backlogs are processed across multiple nightly runs.
+  </div>
+</section>
+
+<!-- ================================================================ OAUTH FLOW -->
+<section class="section" id="arch-oauth">
+  <div class="section-title">OAuth 2.0 Authorization Flow</div>
+
+  <div class="flow"><span class="hi">1. Admin clicks "Connect to Xero"</span>
+       ↓
+<span class="hi">2. POST /api/v1/XeroIntegration/initOAuth</span>  (admin-only)
+       State: random = bin2hex(random_bytes(16))
+       Stored in Integration.oauthState
+       Returns { state: "abc123..." }
+       ↓
+<span class="hi">3. Frontend builds authorization URL:</span>
+   https://login.xero.com/identity/connect/authorize
+     ?client_id={CLIENT_ID}
+     &amp;response_type=code
+     &amp;scope=offline_access accounting.contacts accounting.invoices accounting.payments
+     &amp;redirect_uri={siteUrl}?entryPoint=XeroOauthCallback
+     &amp;state={STATE}
+       ↓
+<span class="hi">4. Frontend opens popup to authorization URL</span>
+       ↓
+<span class="hi">5. User logs in and approves scopes in Xero</span>
+       ↓
+<span class="hi">6. Xero redirects to ?entryPoint=XeroOauthCallback</span>
+     Params: code, state
+       ↓
+<span class="hi">7. XeroOauthCallback.run()</span>
+   → Validate state == Integration.oauthState  (CSRF check)
+   → POST https://identity.xero.com/connect/token
+     grant_type=authorization_code, code, redirect_uri, client credentials
+   → Store accessToken, refreshToken, accessTokenExpiresAt
+   → GET https://api.xero.com/connections
+   → Store tenantId (first connection)
+   → Clear oauthState
+       ↓
+<span class="hi">8. Popup posts window.opener.postMessage({success:true})</span>
+       ↓
+<span class="hi">9. Popup closes; admin UI refreshes → shows Connected + tenantId</span></div>
+
+  <h3>Token Refresh</h3>
+  <p>Tokens refresh automatically inside <code>XeroService::getAccessToken()</code>.
+  A 30-second safety margin triggers a proactive refresh before a request that might
+  otherwise arrive at Xero with an expired token.</p>
+
+  <table>
+    <thead><tr><th>Token</th><th>Lifetime</th><th>Refresh Trigger</th></tr></thead>
+    <tbody>
+      <tr><td>Access token</td><td>~30 minutes</td><td>Automatic — checked before every API call</td></tr>
+      <tr><td>Refresh token</td><td>~60 days</td><td>Manual reconnect required if expired</td></tr>
+    </tbody>
+  </table>
+</section>
+
+<!-- ================================================================ CONFLICT RESOLUTION -->
+<section class="section" id="arch-conflict">
+  <div class="section-title">Conflict Resolution</div>
+
+  <p>
+    <code>Tools/ConflictResolver::resolve(?string $xeroLastUpdated, ?string $espoSyncedAt): string</code>
+    is a pure, stateless function. It compares timestamps and returns one of three constants.
+  </p>
+
+  <table>
+    <thead><tr><th>Scenario</th><th>Result</th><th>Action</th></tr></thead>
+    <tbody>
+      <tr><td>Both timestamps null</td><td><code>WINNER_NONE</code></td><td>Skip — no data to compare</td></tr>
+      <tr><td>Only Xero timestamp known</td><td><code>WINNER_XERO</code></td><td>Pull Xero data into EspoCRM</td></tr>
+      <tr><td>Only EspoCRM timestamp known</td><td><code>WINNER_ESPO</code></td><td>Push EspoCRM data to Xero</td></tr>
+      <tr><td>Both known; Xero is newer</td><td><code>WINNER_XERO</code></td><td>Pull Xero data into EspoCRM</td></tr>
+      <tr><td>Both known; EspoCRM is newer</td><td><code>WINNER_ESPO</code></td><td>Push EspoCRM data to Xero</td></tr>
+      <tr><td>Timestamps exactly equal</td><td><code>WINNER_ESPO</code></td><td>EspoCRM wins (tie-break)</td></tr>
+    </tbody>
+  </table>
+
+  <div class="alert alert-ok">
+    <strong>Design note:</strong> ConflictResolver has zero I/O dependencies (no DB, no network)
+    making it trivially testable and safe to call at high frequency.
+  </div>
+</section>
+
+<!-- ================================================================ TOKEN STORAGE -->
+<section class="section" id="arch-tokens">
+  <div class="section-title">Integration Entity — Token Storage</div>
+
+  <p>All credentials and sync state are stored in the EspoCRM <code>Integration</code> entity
+  (<code>id = 'Xero'</code>), declared in <code>Resources/metadata/integrations/Xero.json</code>.</p>
+
+  <table>
+    <thead><tr><th>Field</th><th>Type</th><th>Purpose</th></tr></thead>
+    <tbody>
+      <tr><td><code>clientId</code></td><td>varchar(255)</td><td>Xero app Client ID (from developer.xero.com)</td></tr>
+      <tr><td><code>clientSecret</code></td><td>password(255)</td><td>Xero app Client Secret — encrypted at rest</td></tr>
+      <tr><td><code>accessToken</code></td><td>text</td><td>Bearer token; ~30 min; auto-refreshed</td></tr>
+      <tr><td><code>refreshToken</code></td><td>text</td><td>Long-lived refresh token; ~60 days</td></tr>
+      <tr><td><code>accessTokenExpiresAt</code></td><td>datetime</td><td>Checked with 30s margin before every API call</td></tr>
+      <tr><td><code>tenantId</code></td><td>varchar(64)</td><td>Xero organisation UUID; populated post-OAuth</td></tr>
+      <tr><td><code>connectedAt</code></td><td>datetime</td><td>Timestamp of last successful OAuth</td></tr>
+      <tr><td><code>lastSyncAt</code></td><td>datetime</td><td>Watermark for pull job window</td></tr>
+      <tr><td><code>defaultAccountCode</code></td><td>varchar(32)</td><td>Chart-of-accounts code for invoice line items (e.g. "200")</td></tr>
+      <tr><td><code>oauthState</code></td><td>varchar(64)</td><td>CSRF token; set during initOAuth, cleared after callback</td></tr>
+      <tr><td><code>lastSyncError</code></td><td>text</td><td>Last reconcile error message; visible in admin UI</td></tr>
+    </tbody>
+  </table>
+</section>
+
+<!-- ================================================================ SETUP PREREQS -->
+<section class="section" id="setup-prereqs">
+  <div class="section-title">Prerequisites</div>
+
+  <table>
+    <thead><tr><th>Requirement</th><th>Minimum</th><th>Notes</th></tr></thead>
+    <tbody>
+      <tr><td>EspoCRM</td><td>9.x</td><td>Must be fully installed with <code>data/config.php</code> present</td></tr>
+      <tr><td>PHP</td><td>8.3</td><td>Extensions: <code>pdo_mysql curl json mbstring openssl zip</code></td></tr>
+      <tr><td>Database</td><td>MySQL 8.0 / MariaDB 10.3+ or PostgreSQL 15+</td><td>—</td></tr>
+      <tr><td>Web server</td><td>nginx / Apache</td><td>URL rewriting required</td></tr>
+      <tr><td>HTTPS certificate</td><td>Any valid cert</td><td>Xero OAuth requires HTTPS; HTTP is rejected</td></tr>
+      <tr><td>Cron daemon</td><td>—</td><td>Must run <code>cron.php</code> every minute</td></tr>
+      <tr><td>Node.js / npm</td><td>22</td><td>Only needed to rebuild frontend JS from source</td></tr>
+      <tr><td>Composer</td><td>2.x</td><td>Only needed for dev/test dependencies</td></tr>
+      <tr><td>zip</td><td>—</td><td>Required for <code>release.sh</code></td></tr>
+    </tbody>
+  </table>
+</section>
+
+<!-- ================================================================ INSTALLATION -->
+<section class="section" id="setup-install">
+  <div class="section-title">Installation</div>
+
+  <h3>From a Release ZIP</h3>
+<pre><code><span class="cmt"># Extract in your EspoCRM root directory</span>
+cd /path/to/espocrm
+unzip espocrm-xero-v1.0.0.zip
+
+<span class="cmt"># Run the installer (copies files + rebuilds metadata)</span>
+bash scripts/install.sh --espo-path /path/to/espocrm</code></pre>
+
+  <h3>From Source (Development)</h3>
+<pre><code>git clone https://github.com/coreconduit/espocrm-xero.git
+cd espocrm-xero
+scripts/install.sh --espo-path /path/to/espocrm</code></pre>
+
+  <p>The install script:</p>
+  <ol>
+    <li>Validates that EspoCRM is installed at the target path</li>
+    <li>Copies <code>custom/Espo/Modules/Xero/</code> to the EspoCRM tree</li>
+    <li>Copies <code>client/custom/modules/xero/</code> to the EspoCRM tree</li>
+    <li>Runs <code>php command.php rebuild</code> to register metadata and update the schema</li>
+    <li>Runs <code>php command.php clear-cache</code></li>
+    <li>Prints post-install configuration steps</li>
+  </ol>
+
+  <h3>Build a Release ZIP</h3>
+<pre><code><span class="cmt"># Requires: zip, php. Optional: node (transpile), phpunit (tests)</span>
+scripts/release.sh --version 1.0.0 --espo-path /path/to/espocrm
+<span class="cmt"># Output: releases/espocrm-xero-v1.0.0.zip  (SHA-256 printed)</span>
+
+<span class="cmt"># Skip tests and transpile for a fast local build:</span>
+scripts/release.sh --version 1.0.0 --skip-tests --skip-transpile</code></pre>
+</section>
+
+<!-- ================================================================ HTTPS -->
+<section class="section" id="setup-https">
+  <div class="section-title">HTTPS / TLS Setup</div>
+
+  <div class="alert alert-warn">
+    <strong>Xero requirement:</strong> Xero's OAuth 2.0 server rejects any redirect URI that
+    does not use HTTPS. The integration will not work over plain HTTP.
+  </div>
+
+  <h3>Development — mkcert</h3>
+<pre><code>sudo apt-get install mkcert
+sudo mkcert -key-file /etc/ssl/cake.local-key.pem \
+            -cert-file /etc/ssl/cake.local.pem cake.local</code></pre>
+
+  <h3>nginx Configuration</h3>
+<pre><code><span class="kw">server</span> {
+    listen 8080;
+    server_name cake.local;
+    <span class="kw">return</span> 301 https://$server_name:8443$request_uri;
+}
+
+<span class="kw">server</span> {
+    listen 8443 ssl;
+    server_name cake.local;
+    root /path/to/espocrm;
+    index index.php;
+
+    ssl_certificate     /etc/ssl/cake.local.pem;
+    ssl_certificate_key /etc/ssl/cake.local-key.pem;
+
+    add_header Strict-Transport-Security <span class="str">"max-age=31536000"</span> always;
+    add_header X-Content-Type-Options <span class="str">"nosniff"</span> always;
+
+    location / { try_files $uri $uri/ /index.php?$query_string; }
+
+    location ~ \.php$ {
+        fastcgi_pass unix:/run/php/php8.3-fpm.sock;
+        fastcgi_param SCRIPT_FILENAME $document_root$fastcgi_script_name;
+        include fastcgi_params;
+    }
+
+    location ~* ^/(data|custom|application|vendor)/ { deny all; }
+    location ~ /\. { deny all; }
+}</code></pre>
+
+  <p>After updating nginx: <code>sudo nginx -t && sudo systemctl reload nginx</code></p>
+  <p>Set EspoCRM site URL: <strong>Admin → Settings → Site URL</strong> → <code>https://cake.local:8443</code></p>
+</section>
+
+<!-- ================================================================ XERO APP CONFIG -->
+<section class="section" id="setup-xero">
+  <div class="section-title">Xero App Configuration</div>
+
+  <h3>1. Create a Xero Developer App</h3>
+  <ol>
+    <li>Sign in at <a href="https://developer.xero.com" target="_blank">developer.xero.com</a> → <strong>My Apps → New app</strong></li>
+    <li>Choose <strong>Web app</strong> as integration type</li>
+    <li>Under <strong>Redirect URIs</strong>, add exactly:<br>
+        <code>https://your-espocrm-domain.com?entryPoint=XeroOauthCallback</code></li>
+    <li>Under <strong>Scopes</strong>, select: <code>openid profile email offline_access
+        accounting.contacts accounting.invoices accounting.payments accounting.reports.read</code></li>
+    <li>Copy <strong>Client ID</strong> and <strong>Client Secret</strong></li>
+  </ol>
+
+  <h3>2. Find Your Default Account Code</h3>
+  <p>Xero requires every invoice line item to reference a chart-of-accounts code.<br>
+  In Xero: <strong>Accounting → Chart of Accounts</strong> — note the <strong>Code</strong> column
+  for your income account (e.g., <code>200</code> for Sales).</p>
+
+  <h3>3. Configure in EspoCRM</h3>
+  <ol>
+    <li>Go to <strong>Admin → Integrations → Xero</strong></li>
+    <li>Toggle <strong>Enabled</strong> to on</li>
+    <li>Enter <strong>Client ID</strong> and <strong>Client Secret</strong></li>
+    <li>Enter <strong>Default Account Code</strong> (e.g., <code>200</code>)</li>
+    <li>Click <strong>Save</strong></li>
+    <li>Click <strong>Connect to Xero</strong> — authorize in the popup</li>
+    <li>After the popup closes, verify <strong>tenantId</strong> and <strong>connectedAt</strong> are populated</li>
+  </ol>
+</section>
+
+<!-- ================================================================ CRON -->
+<section class="section" id="setup-cron">
+  <div class="section-title">Cron &amp; Scheduled Jobs</div>
+
+  <h3>Cron Entry</h3>
+<pre><code><span class="cmt"># Add as root or via: crontab -e (as www-data)</span>
+* * * * * www-data php /path/to/espocrm/cron.php > /dev/null 2>&amp;1</code></pre>
+
+  <h3>Scheduled Jobs</h3>
+  <p>In <strong>Admin → Scheduled Jobs</strong>, create these two jobs:</p>
+
+  <table>
+    <thead><tr><th>Job Name (registered)</th><th>Schedule</th><th>Purpose</th></tr></thead>
+    <tbody>
+      <tr>
+        <td>Xero: Sync from Xero</td>
+        <td><code>0 2 * * *</code></td>
+        <td>Pull Xero Contact updates + Payment records</td>
+      </tr>
+      <tr>
+        <td>Xero: Reconcile</td>
+        <td><code>15 2 * * *</code></td>
+        <td>Push EspoCRM Accounts + Invoices modified since last sync</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <div class="alert alert-info">
+    Run <strong>Reconcile 15 minutes after Sync</strong> so conflicts pulled from Xero are applied
+    before the outbound push.
+  </div>
+
+  <h3>Manual Job Execution</h3>
+<pre><code>php command.php run-job --job-class="Espo\Modules\Xero\Jobs\SyncFromXero"
+php command.php run-job --job-class="Espo\Modules\Xero\Jobs\ReconcileXero"</code></pre>
+</section>
+
+<!-- ================================================================ API: XEROSERVICE -->
+<section class="section" id="api-xero-service">
+  <div class="section-title">XeroService API</div>
+
+  <p>File: <code>Services/XeroService.php</code> — all Xero API calls, token refresh, and field mapping.</p>
+
+  <h3>upsertContact(string $entityType, Entity $entity): void</h3>
+  <p>Creates or updates a Xero Contact from an EspoCRM Account or Contact.</p>
+  <table>
+    <thead><tr><th>EspoCRM Field</th><th>Xero Contact Field</th><th>Notes</th></tr></thead>
+    <tbody>
+      <tr><td>Account.name</td><td>Name</td><td>—</td></tr>
+      <tr><td>Contact.firstName + lastName</td><td>FirstName, LastName</td><td>—</td></tr>
+      <tr><td>emailAddress</td><td>EmailAddress</td><td>Used for de-duplication in Xero</td></tr>
+      <tr><td>phoneNumber</td><td>Phones[0].PhoneNumber (DEFAULT)</td><td>—</td></tr>
+      <tr><td>billingAddress*</td><td>Addresses[0] (POBOX)</td><td>—</td></tr>
+      <tr><td>xeroContactId (null)</td><td>— (POST creates new)</td><td>ID written back on success</td></tr>
+      <tr><td>xeroContactId (set)</td><td>ContactID (POST updates)</td><td>Xero uses POST for both create and update</td></tr>
+    </tbody>
+  </table>
+
+  <h3>upsertInvoice(Entity $invoice): void</h3>
+  <p>Pushes an EspoCRM Invoice to Xero. The linked Account must have <code>xeroContactId</code> set.</p>
+  <table>
+    <thead><tr><th>EspoCRM Field</th><th>Xero Invoice Field</th><th>Notes</th></tr></thead>
+    <tbody>
+      <tr><td>name</td><td>InvoiceNumber</td><td>—</td></tr>
+      <tr><td>amount</td><td>Fallback single line item amount</td><td>Used if lineItems is empty</td></tr>
+      <tr><td>dueDate</td><td>DueDate</td><td>—</td></tr>
+      <tr><td>status</td><td>Status</td><td>See status mapping table below</td></tr>
+      <tr><td>lineItems[].description</td><td>LineItems[].Description</td><td>—</td></tr>
+      <tr><td>lineItems[].quantity</td><td>LineItems[].Quantity</td><td>—</td></tr>
+      <tr><td>lineItems[].unitPrice</td><td>LineItems[].UnitAmount</td><td>—</td></tr>
+      <tr><td>lineItems[].xeroAccountCode</td><td>LineItems[].AccountCode</td><td>Falls back to defaultAccountCode if absent</td></tr>
+    </tbody>
+  </table>
+
+  <h4>Invoice Status Mapping</h4>
+  <table>
+    <thead><tr><th>EspoCRM Status</th><th>Xero Status</th><th>Direction</th></tr></thead>
+    <tbody>
+      <tr><td>Draft</td><td>DRAFT</td><td>Push</td></tr>
+      <tr><td>Sent</td><td>SUBMITTED</td><td>Push</td></tr>
+      <tr><td>Paid</td><td>PAID (read-only)</td><td>Pull only — set by payment receipt</td></tr>
+      <tr><td>Voided</td><td>VOIDED</td><td>Push → triggers <code>voidInvoice()</code></td></tr>
+      <tr><td>Overdue</td><td>AUTHORISED</td><td>Push</td></tr>
+    </tbody>
+  </table>
+
+  <h3>voidInvoice(Entity $invoice): void</h3>
+  <p>Voids a Xero Invoice. Valid only for AUTHORISED status invoices (not PAID).</p>
+
+  <h3>pullContactsSince(string $sinceDate): void</h3>
+  <p>Fetches Xero Contacts updated since <code>sinceDate</code>. Uses <code>ConflictResolver</code>
+  before overwriting EspoCRM fields.</p>
+
+  <h3>pullPaymentsSince(string $sinceDate): void</h3>
+  <p>Fetches Xero Payments received since <code>sinceDate</code>. Finds the linked EspoCRM Invoice
+  via <code>xeroInvoiceId</code> and sets status to <code>Paid</code>.</p>
+</section>
+
+<!-- ================================================================ API: CONTROLLER -->
+<section class="section" id="api-controller">
+  <div class="section-title">Controller Endpoints</div>
+
+  <p>File: <code>Controllers/XeroIntegration.php</code> — admin-only (throws <code>Forbidden</code> for non-admins).</p>
+
+  <table>
+    <thead><tr><th>Route</th><th>Method</th><th>Action</th><th>Returns</th></tr></thead>
+    <tbody>
+      <tr>
+        <td><code>/api/v1/XeroIntegration/initOAuth</code></td>
+        <td>POST</td>
+        <td>Generate CSRF state token; store in Integration</td>
+        <td><code>{"state": "hex32chars"}</code></td>
+      </tr>
+      <tr>
+        <td><code>/api/v1/XeroIntegration/runSync</code></td>
+        <td>POST</td>
+        <td>Immediately run SyncFromXero + ReconcileXero jobs</td>
+        <td><code>{}</code></td>
+      </tr>
+    </tbody>
+  </table>
+</section>
+
+<!-- ================================================================ API: ENTRY POINT -->
+<section class="section" id="api-entrypoint">
+  <div class="section-title">OAuth Callback Entry Point</div>
+
+  <p>File: <code>EntryPoints/XeroOauthCallback.php</code></p>
+  <p>URL: <code>{siteUrl}?entryPoint=XeroOauthCallback</code></p>
+  <p>Authentication: <code>NoAuth</code> trait (unauthenticated — browser redirect from Xero)</p>
+
+  <p>Security checks performed on every callback:</p>
+  <ol>
+    <li>Validates <code>state</code> param is present and matches <code>Integration.oauthState</code></li>
+    <li>Rejects if Integration has no stored state token (replay attack guard)</li>
+    <li>Exchanges <code>code</code> for tokens via <code>POST identity.xero.com/connect/token</code></li>
+    <li>Calls <code>GET api.xero.com/connections</code> to fetch tenant ID</li>
+    <li>Clears <code>oauthState</code> from Integration on success</li>
+  </ol>
+</section>
+
+<!-- ================================================================ API: JOBS -->
+<section class="section" id="api-jobs">
+  <div class="section-title">Background Jobs</div>
+
+  <table>
+    <thead><tr><th>Class</th><th>Registered Name</th><th>Schedule</th><th>Description</th></tr></thead>
+    <tbody>
+      <tr>
+        <td><code>Jobs\SyncFromXero</code></td>
+        <td>Xero: Sync from Xero</td>
+        <td><code>0 2 * * *</code></td>
+        <td>Pull contacts + payments from Xero; watermarked by lastSyncAt</td>
+      </tr>
+      <tr>
+        <td><code>Jobs\ReconcileXero</code></td>
+        <td>Xero: Reconcile</td>
+        <td><code>15 2 * * *</code></td>
+        <td>Push unsynced/modified Accounts + Invoices (batch 25)</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <p>Both implement <code>Espo\Core\Job\JobDataLess</code> and are registered in
+  <code>Resources/metadata/app/scheduledJobs.json</code>.</p>
+
+  <h3>Xero API Endpoints Used by Jobs</h3>
+  <table>
+    <thead><tr><th>Operation</th><th>Method</th><th>Endpoint</th><th>Notes</th></tr></thead>
+    <tbody>
+      <tr><td>Upsert Contact</td><td>POST</td><td>/Contacts</td><td>Used for create and update</td></tr>
+      <tr><td>Upsert Invoice</td><td>POST</td><td>/Invoices</td><td>Returns InvoiceID</td></tr>
+      <tr><td>Void Invoice</td><td>POST</td><td>/Invoices/{id}</td><td>Status: VOIDED</td></tr>
+      <tr><td>Pull Contacts</td><td>GET</td><td>/Contacts</td><td>If-Modified-Since header</td></tr>
+      <tr><td>Pull Payments</td><td>GET</td><td>/Payments</td><td>where=Date>=DateTime(...)</td></tr>
+      <tr><td>List tenants</td><td>GET</td><td>api.xero.com/connections</td><td>Post-OAuth only</td></tr>
+      <tr><td>Refresh token</td><td>POST</td><td>identity.xero.com/connect/token</td><td>Auto-triggered</td></tr>
+    </tbody>
+  </table>
+</section>
+
+<!-- ================================================================ API: SCHEMA -->
+<section class="section" id="api-schema">
+  <div class="section-title">Data Schema</div>
+
+  <h3>New Entity: Invoice</h3>
+  <table>
+    <thead><tr><th>Field</th><th>Type</th><th>Notes</th></tr></thead>
+    <tbody>
+      <tr><td>name</td><td>varchar(255)</td><td>Invoice number or reference; required</td></tr>
+      <tr><td>status</td><td>enum</td><td>Draft · Sent · Paid · Overdue · Voided; default: Draft</td></tr>
+      <tr><td>amount</td><td>currency</td><td>Total; used as fallback single line item</td></tr>
+      <tr><td>dueDate</td><td>date</td><td>—</td></tr>
+      <tr><td>lineItems</td><td>jsonArray</td><td><code>[{description, quantity, unitPrice, xeroAccountCode}]</code></td></tr>
+      <tr><td>account</td><td>link → Account</td><td>Required for Xero sync (provides xeroContactId)</td></tr>
+      <tr><td>contact</td><td>link → Contact</td><td>Optional</td></tr>
+      <tr><td>xeroInvoiceId</td><td>varchar(64)</td><td>Set after first push; read-only in UI</td></tr>
+      <tr><td>xeroSyncedAt</td><td>datetime</td><td>Timestamp of last successful sync; read-only</td></tr>
+      <tr><td>xeroPaymentId</td><td>varchar(64)</td><td>Populated by nightly pull on payment receipt</td></tr>
+      <tr><td>xeroPaymentDate</td><td>date</td><td>Payment date from Xero</td></tr>
+    </tbody>
+  </table>
+
+  <h3>Fields Added to Account</h3>
+  <table>
+    <thead><tr><th>Field</th><th>Type</th><th>Notes</th></tr></thead>
+    <tbody>
+      <tr><td>xeroContactId</td><td>varchar(64)</td><td>Xero Contact UUID; set after first push</td></tr>
+      <tr><td>xeroSyncedAt</td><td>datetime</td><td>Timestamp of last successful contact sync</td></tr>
+    </tbody>
+  </table>
+
+  <p>Contact receives the same two fields (<code>xeroContactId</code>, <code>xeroSyncedAt</code>).</p>
+  <p>Account also gains an <code>invoices</code> hasMany link → Invoice.</p>
+</section>
+
+<!-- ================================================================ API: FRONTEND -->
+<section class="section" id="api-frontend">
+  <div class="section-title">Frontend View</div>
+
+  <p>File: <code>client/custom/modules/xero/src/views/admin/integrations/xero.js</code></p>
+  <p>Registered via: <code>Resources/metadata/integrations/Xero.json → "view": "xero:views/admin/integrations/xero"</code></p>
+
+  <p>Extends EspoCRM's built-in <code>IntegrationsEditView</code> and adds:</p>
+  <ul>
+    <li><strong>Connect to Xero</strong> button — calls <code>initOAuth</code>, opens popup, listens for <code>postMessage</code></li>
+    <li><strong>Run Sync</strong> button — calls <code>runSync</code> endpoint</li>
+    <li>Connection status panel showing: connected state, tenantId, connectedAt, lastSyncAt, lastSyncError</li>
+  </ul>
+
+  <p>The side panel view (<code>xero-status.js</code> + <code>xero-status.tpl</code>) renders on Account and Contact
+  detail pages, showing xeroContactId and xeroSyncedAt.</p>
+
+  <div class="alert alert-info">
+    <strong>Transpilation:</strong> JavaScript source files are compiled to AMD modules by EspoCRM's
+    <code>js/transpile.js</code> pipeline. The compiled output lives in <code>lib/transpiled/src/</code>.
+    Run <code>node js/transpile.js</code> from the EspoCRM root after editing source files.
+  </div>
+</section>
+
+<!-- ================================================================ TESTING -->
+<section class="section" id="ops-testing">
+  <div class="section-title">Testing</div>
+
+  <h3>Running Unit Tests</h3>
+  <p>Tests use EspoCRM's vendor PHPUnit. The <code>ESPO_PATH</code> environment variable
+  points to the EspoCRM installation for autoloading.</p>
+
+<pre><code><span class="cmt"># Run full Xero test suite (87 tests)</span>
+ESPO_PATH=/path/to/espocrm \
+  /path/to/espocrm/vendor/bin/phpunit \
+  --configuration phpunit.xml \
+  --no-coverage</code></pre>
+
+  <h3>Test Coverage</h3>
+  <table>
+    <thead><tr><th>Test File</th><th>Coverage Area</th></tr></thead>
+    <tbody>
+      <tr><td>ConflictResolverTest.php</td><td>All timestamp comparison cases</td></tr>
+      <tr><td>HooksSyncTest.php</td><td>Hook execution, loop guard, failure handling</td></tr>
+      <tr><td>ReconcileXeroTest.php</td><td>Batch processing, unsynced + stale record detection</td></tr>
+      <tr><td>SyncFromXeroTest.php</td><td>Pull job watermark logic, contact and payment sync</td></tr>
+      <tr><td>XeroIntegrationControllerTest.php</td><td>initOAuth state generation, runSync dispatch</td></tr>
+      <tr><td>XeroOauthCallbackTest.php</td><td>State validation, token exchange, tenant fetch</td></tr>
+      <tr><td>XeroServiceFieldMappingTest.php</td><td>Field mapping for contacts and invoices</td></tr>
+      <tr><td>XeroServiceHttpTest.php</td><td>HTTP request construction, error handling</td></tr>
+      <tr><td>XeroServicePullTest.php</td><td>Pull payload parsing, payment → invoice matching</td></tr>
+    </tbody>
+  </table>
+</section>
+
+<!-- ================================================================ CLI -->
+<section class="section" id="ops-cli">
+  <div class="section-title">CLI Reference</div>
+
+<pre><code><span class="cmt"># Rebuild metadata, schema, and cache</span>
+php command.php rebuild
+
+<span class="cmt"># Clear cache only (faster than rebuild)</span>
+php command.php clear-cache
+
+<span class="cmt"># Run sync jobs manually</span>
+php command.php run-job --job-class="Espo\Modules\Xero\Jobs\SyncFromXero"
+php command.php run-job --job-class="Espo\Modules\Xero\Jobs\ReconcileXero"
+
+<span class="cmt"># Check site URL config</span>
+php command.php config:get --name=siteUrl
+
+<span class="cmt"># Set admin password</span>
+php command.php set-password --user-name=admin
+
+<span class="cmt"># List all available commands</span>
+php command.php --help</code></pre>
+</section>
+
+<!-- ================================================================ LOGS -->
+<section class="section" id="ops-logs">
+  <div class="section-title">Logs &amp; Debugging</div>
+
+  <table>
+    <thead><tr><th>Log</th><th>Location</th><th>Content</th></tr></thead>
+    <tbody>
+      <tr><td>EspoCRM application log</td><td><code>data/logs/espo.log</code></td><td>All sync warnings, errors, OAuth events</td></tr>
+      <tr><td>Sync errors (in UI)</td><td>Admin → Integrations → Xero → lastSyncError field</td><td>Last reconcile error summary</td></tr>
+      <tr><td>nginx access/error</td><td><code>/var/log/nginx/</code></td><td>HTTP-level OAuth redirect issues</td></tr>
+    </tbody>
+  </table>
+
+  <p>Useful log grep commands:</p>
+<pre><code><span class="cmt"># Watch sync activity in real time</span>
+tail -f /path/to/espocrm/data/logs/espo.log | grep -i xero
+
+<span class="cmt"># Find all sync failures</span>
+grep -i "xero sync failed" /path/to/espocrm/data/logs/espo.log
+
+<span class="cmt"># Find OAuth events</span>
+grep -i "xero.*oauth\|xeroOauth" /path/to/espocrm/data/logs/espo.log</code></pre>
+</section>
+
+<!-- ================================================================ TROUBLESHOOTING -->
+<section class="section" id="ops-troubleshoot">
+  <div class="section-title">Troubleshooting</div>
+
+  <div class="card">
+    <div class="card-body">
+      <div class="card-title">OAuth fails: "Invalid Redirect URI"</div>
+      <p><strong>Cause:</strong> siteUrl doesn't match registered URI, or HTTPS cert is untrusted.</p>
+      <ol>
+        <li>Verify siteUrl in <strong>Admin → Settings</strong> is exactly <code>https://cake.local:8443</code></li>
+        <li>For mkcert (dev): visit the URL in your browser and accept the certificate warning</li>
+        <li>Verify the exact redirect URI registered in developer.xero.com matches your siteUrl</li>
+      </ol>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-body">
+      <div class="card-title">"Xero integration is not enabled"</div>
+      <p><strong>Cause:</strong> Integration is disabled, or connection was lost.</p>
+      <p>Go to <strong>Admin → Integrations → Xero</strong>, toggle Enabled, and reconnect.</p>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-body">
+      <div class="card-title">Invoice sync fails: "no Xero Contact ID"</div>
+      <p><strong>Cause:</strong> The linked Account has not been synced to Xero yet.</p>
+      <p>Save the Account record once to trigger the hook, or wait for the nightly Reconcile job.
+      Then save the Invoice again.</p>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-body">
+      <div class="card-title">Xero API rejects invoice: account code error</div>
+      <p><strong>Cause:</strong> <code>defaultAccountCode</code> is not set or references a non-existent/archived account.</p>
+      <p>Set a valid account code in <strong>Admin → Integrations → Xero → Default Account Code</strong>.
+      Use the Code column from <strong>Xero → Accounting → Chart of Accounts</strong>.</p>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-body">
+      <div class="card-title">Token refresh failures / "No access token"</div>
+      <p><strong>Cause:</strong> Refresh token expired (~60 days of inactivity).</p>
+      <p>Reconnect via <strong>Admin → Integrations → Xero → Connect to Xero</strong>.</p>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-body">
+      <div class="card-title">Sync jobs not running</div>
+      <p><strong>Cause:</strong> Cron is not configured or scheduled jobs are disabled.</p>
+      <ol>
+        <li>Check cron: <code>sudo crontab -l | grep cron.php</code></li>
+        <li>Test manually: <code>php /path/to/espocrm/cron.php</code></li>
+        <li>Verify jobs are enabled in <strong>Admin → Scheduled Jobs</strong></li>
+        <li>Check <code>data/logs/espo.log</code> for scheduler errors</li>
+      </ol>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-body">
+      <div class="card-title">Payments not marking invoices as Paid</div>
+      <p><strong>Cause:</strong> Invoice was created in Xero directly, not pushed from EspoCRM — there is no matching <code>xeroInvoiceId</code>.</p>
+      <p>Only invoices originally pushed from EspoCRM (with a <code>xeroInvoiceId</code>) can be matched to Xero payments.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ================================================================ GAP ANALYSIS -->
+<section class="section" id="gaps">
+  <div class="section-title">Gap Analysis</div>
+
+  <div class="alert alert-ok">
+    <strong>All v1.0 critical gaps resolved.</strong> The items below are
+    enhancements and nice-to-haves for future versions.
+  </div>
+
+  <table>
+    <thead>
+      <tr>
+        <th>#</th><th>Gap</th><th>Severity</th><th>Status</th><th>Effort</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>1</td>
+        <td>Disconnect / Reconnect endpoint</td>
+        <td class="sev-high">High</td>
+        <td class="status-open">Open</td>
+        <td>Small (~30 min)</td>
+      </tr>
+      <tr>
+        <td>2</td>
+        <td>Multi-tenant Xero support (single tenantId stored)</td>
+        <td class="sev-medium">Medium</td>
+        <td class="status-open">Open</td>
+        <td>Large (~3h)</td>
+      </tr>
+      <tr>
+        <td>3</td>
+        <td>Sync audit trail (no user-visible log)</td>
+        <td class="sev-medium">Medium</td>
+        <td class="status-open">Open</td>
+        <td>Medium (~1-2h)</td>
+      </tr>
+      <tr>
+        <td>4</td>
+        <td>Xero webhook support (sync is polling-only)</td>
+        <td class="sev-low">Low</td>
+        <td class="status-open">Open</td>
+        <td>Large (~4-5h)</td>
+      </tr>
+      <tr>
+        <td>5</td>
+        <td>Health check endpoint (ping Xero connection)</td>
+        <td class="sev-low">Low</td>
+        <td class="status-open">Open</td>
+        <td>Small (~30 min)</td>
+      </tr>
+      <tr>
+        <td>6</td>
+        <td>Tax handling (taxCode / taxRate on invoices)</td>
+        <td class="sev-low">Low</td>
+        <td class="status-open">Open</td>
+        <td>Medium (~1-2h)</td>
+      </tr>
+      <tr>
+        <td>7</td>
+        <td>PDF attachment sync</td>
+        <td class="sev-low">Low</td>
+        <td class="status-open">Open</td>
+        <td>Medium (~1-2h)</td>
+      </tr>
+      <tr>
+        <td>8</td>
+        <td>Opportunity → Invoice automation (Closed Won)</td>
+        <td class="sev-low">Low</td>
+        <td class="status-open">Open</td>
+        <td>Medium (~1-2h)</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h3>Resolved Gaps (v1.0)</h3>
+  <table>
+    <thead><tr><th>Gap</th><th>Resolution</th></tr></thead>
+    <tbody>
+      <tr><td>Connect button missing in admin UI</td><td class="status-resolved">RESOLVED — custom admin view with OAuth popup</td></tr>
+      <tr><td>siteUrl injection bug in OAuth callback</td><td class="status-resolved">RESOLVED — Config dependency injected</td></tr>
+      <tr><td>lastSyncAt field not declared</td><td class="status-resolved">RESOLVED — added to integrations/Xero.json</td></tr>
+      <tr><td>Scheduled jobs not registered</td><td class="status-resolved">RESOLVED — metadata/app/scheduledJobs.json created</td></tr>
+      <tr><td>Invoice reverse links missing</td><td class="status-resolved">RESOLVED — hasMany invoices link on Account</td></tr>
+      <tr><td>OAuth state generation missing</td><td class="status-resolved">RESOLVED — initOAuth endpoint implemented</td></tr>
+      <tr><td>Invoice CRUD controller missing</td><td class="status-resolved">RESOLVED — Invoice controller extending Record created</td></tr>
+      <tr><td>Hook naming collision (XeroSync)</td><td class="status-resolved">RESOLVED — hooks named XeroSync to avoid EspoCRM dedup bug</td></tr>
+    </tbody>
+  </table>
+
+  <h3>Gap Detail: Disconnect Endpoint (#1)</h3>
+  <p>Once connected to Xero, there is no admin UI button to clear tokens and reconnect to a different
+  organisation. Workaround: clear via CLI:</p>
+<pre><code>php command.php config:set --name=integration_data_Xero \
+  --value='{"clientId":"...","clientSecret":"..."}'</code></pre>
+  <p><strong>Fix approach:</strong> Add <code>deleteActionConnection()</code> to the controller
+  to null out accessToken, refreshToken, tenantId, and connectedAt. Add a Disconnect button
+  to the admin view.</p>
+</section>
+
+</main>
+
+<script>
+  // Highlight active nav link on scroll
+  const sections = document.querySelectorAll('.section');
+  const links = document.querySelectorAll('.nav-link');
+
+  const obs = new IntersectionObserver(entries => {
+    entries.forEach(e => {
+      if (e.isIntersecting) {
+        links.forEach(l => l.classList.remove('active'));
+        const link = document.querySelector(`.nav-link[href="#${e.target.id}"]`);
+        if (link) link.classList.add('active');
+      }
+    });
+  }, { rootMargin: '-20% 0px -70% 0px' });
+
+  sections.forEach(s => obs.observe(s));
+</script>
+</body>
+</html>

@@ -441,7 +441,8 @@ Current test count: 87 passing tests covering:
 
 ### Integration Tests
 
-Integration tests require a Xero sandbox company. See `tests/integration/` for setup.
+Integration tests against a live Xero sandbox are not included in this release.
+All shipped tests are unit tests using mocks.
 
 ### Manual Testing
 

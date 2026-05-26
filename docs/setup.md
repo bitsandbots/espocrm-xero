@@ -3,34 +3,27 @@
 ## Prerequisites
 
 | Requirement | Minimum | Notes |
-|-------------|---------|-------|
+|---|---|---|
 | PHP | 8.3 | Extensions: pdo_mysql, curl, json, mbstring, openssl, zip |
 | MySQL / MariaDB | 8.0 / 10.3+ | Or PostgreSQL 15+ |
 | Web server | nginx / Apache | URL rewriting required |
-| Composer | 2.x | For dependency management |
-| Node.js / npm | 22 | Only needed for frontend build (transpile custom modules) |
+| HTTPS certificate | — | Xero OAuth requires HTTPS; HTTP is rejected |
 | Cron | — | Must call `cron.php` every minute |
-| HTTPS (for Xero) | — | Xero OAuth requires HTTPS; Intuit QB accepts both HTTP and HTTPS |
+| Node.js / npm | 22 | Only needed for frontend JS transpilation |
+| Composer | 2.x | Only needed for dev/test dependencies |
 
 ## Installation
 
-### Step 1 — Clone EspoCRM
+### Step 1 — Install EspoCRM
 
 ```bash
-cd /home/coreconduit
+cd /path/to/webroot
 git clone https://github.com/espocrm/espocrm.git espocrm
 cd espocrm
-```
-
-### Step 2 — Install PHP Dependencies
-
-```bash
 composer install
 ```
 
-This installs core EspoCRM, PHPUnit, PHPStan, and all custom module dependencies.
-
-### Step 3 — Set File Permissions
+### Step 2 — Set File Permissions
 
 ```bash
 find . -type d -exec chmod 755 {} \;
@@ -38,43 +31,51 @@ find . -type f -exec chmod 644 {} \;
 chmod -R 775 data/ custom/ client/ application/
 ```
 
-### Step 4 — Rebuild Metadata & Schema
+### Step 3 — Install the Xero Module
+
+**From release ZIP:**
 
 ```bash
-php rebuild.php
+cd /path/to/espocrm
+unzip espocrm-xero-v*.zip
+bash scripts/install.sh --espo-path /path/to/espocrm
 ```
 
-This registers all module metadata, creates the database schema, and caches the config. Run this after:
-- Pulling code changes
-- Adding/modifying any custom module (QuickBooks, Xero, etc.)
-- Updating integration metadata
+**From source:**
 
-### Step 5 — Configure Cron
+```bash
+git clone https://github.com/coreconduit/espocrm-xero.git
+cd espocrm-xero
+scripts/install.sh --espo-path /path/to/espocrm
+```
+
+The install script copies module files and runs `php command.php rebuild` to register metadata
+and update the database schema.
+
+### Step 4 — Configure Cron
 
 Add to `/etc/crontab` or `crontab -e`:
 
 ```
-* * * * * www-data php /home/coreconduit/espocrm/cron.php > /dev/null 2>&1
+* * * * * www-data php /path/to/espocrm/cron.php > /dev/null 2>&1
 ```
 
-This executes scheduled jobs every minute (SyncFromQuickBooks, SyncFromXero, ReconcileQuickBooks, ReconcileXero, etc.).
+This executes EspoCRM scheduled jobs every minute, including `SyncFromXero` and `ReconcileXero`.
 
 ## HTTPS Setup (Required for Xero)
 
-Xero OAuth requires HTTPS with a valid certificate. This instance uses mkcert for local development and nginx reverse proxy on port 8443.
+Xero OAuth requires HTTPS with a valid certificate. HTTP is rejected by Xero's authorization server.
 
-### Step 1 — Generate HTTPS Certificate with mkcert
+### Development — mkcert
 
 ```bash
-# Install mkcert (if not already installed)
 sudo apt-get install mkcert
-
-# Generate certificate for cake.local
 sudo mkdir -p /etc/ssl/
-sudo mkcert -key-file /etc/ssl/cake.local-key.pem -cert-file /etc/ssl/cake.local.pem cake.local
+sudo mkcert -key-file /etc/ssl/cake.local-key.pem \
+            -cert-file /etc/ssl/cake.local.pem cake.local
 ```
 
-### Step 2 — Configure nginx for HTTPS
+### nginx Configuration
 
 Create or update `/etc/nginx/sites-available/espocrm`:
 
@@ -90,44 +91,31 @@ server {
 server {
     listen 8443 ssl;
     server_name cake.local;
-    root /home/coreconduit/espocrm;
+    root /path/to/espocrm;
     index index.php;
 
-    # SSL certificates
-    ssl_certificate /etc/ssl/cake.local.pem;
+    ssl_certificate     /etc/ssl/cake.local.pem;
     ssl_certificate_key /etc/ssl/cake.local-key.pem;
 
-    # Security headers
     add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
     add_header X-Content-Type-Options "nosniff" always;
     add_header X-Frame-Options "SAMEORIGIN" always;
     add_header Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline';" always;
 
-    # URL rewriting
     location / {
         try_files $uri $uri/ /index.php?$query_string;
     }
 
-    # PHP-FPM
     location ~ \.php$ {
         fastcgi_pass unix:/run/php/php8.3-fpm.sock;
         fastcgi_param SCRIPT_FILENAME $document_root$fastcgi_script_name;
         include fastcgi_params;
     }
 
-    # Deny direct access to sensitive directories
-    location ~* ^/(data|custom|application|vendor)/ {
-        deny all;
-    }
-
-    # Block .htaccess and config files
-    location ~ /\. {
-        deny all;
-    }
+    location ~* ^/(data|custom|application|vendor)/ { deny all; }
+    location ~ /\. { deny all; }
 }
 ```
-
-### Step 3 — Enable the Site and Reload nginx
 
 ```bash
 sudo ln -sf /etc/nginx/sites-available/espocrm /etc/nginx/sites-enabled/espocrm
@@ -135,167 +123,109 @@ sudo nginx -t
 sudo systemctl reload nginx
 ```
 
-### Step 4 — Update EspoCRM Site URL
-
-After installing EspoCRM, set the `siteUrl` in **Administration → Settings**:
-
-```
-https://cake.local:8443
-```
-
-This is critical for both QuickBooks and Xero OAuth callbacks to work correctly.
-
-## QuickBooks Integration Setup
-
-### Step 1 — Create a QB Developer App
-
-1. Visit [developer.intuit.com](https://developer.intuit.com)
-2. Sign in with your Intuit account (create one if needed)
-3. Click **Create an app**
-4. Select **QuickBooks Online and Payments**
-5. Enter an app name (e.g., "EspoCRM-QB")
-6. In **Keys & credentials**, note:
-   - `Client ID`
-   - `Client Secret`
-7. Under **Redirect URIs**, add:
-   ```
-   https://cake.local:8443?entryPoint=QuickBooksOauthCallback
-   ```
-8. In **Scopes**, ensure `com.intuit.quickbooks.accounting` is selected
-9. Save the app
-
-### Step 2 — Configure in EspoCRM
-
-1. Navigate to **Administration → Integrations → QuickBooks**
-2. Toggle **Enabled** to on
-3. Paste the `Client ID` and `Client Secret`
-4. Click **Save**
-
-### Step 3 — Authorize with QuickBooks
-
-1. On the QuickBooks integration page, click **Connect to QuickBooks**
-2. A popup opens the QB authorization URL
-3. Sign in with your QB account and approve the scope request
-4. The popup closes; the integration page refreshes and populates:
-   - `realmId` (QB company ID)
-   - `connectedAt` (timestamp)
-
-### Step 4 — Create Scheduled Jobs
-
-In **Administration → Scheduled Jobs**, add these two jobs:
-
-| Job Class | Schedule | Purpose |
-|-----------|----------|---------|
-| `Espo\Modules\QuickBooks\Jobs\SyncFromQuickBooks` | `0 2 * * *` (2 AM daily) | Pull customers and payments from QB |
-| `Espo\Modules\QuickBooks\Jobs\ReconcileQuickBooks` | `0 3 * * *` (3 AM daily) | Push modified Accounts/Invoices to QB |
-
-You can also run these manually via **Administration → Integrations → QuickBooks** and click **Run Sync**.
-
-### Step 5 — Verify Integration
-
-1. Create or edit an Account in EspoCRM
-2. Fill in `name`, `emailAddress`, `phoneNumber`, and save
-3. Within 10 seconds, the `qbCustomerId` field should auto-populate
-4. In QuickBooks Online, go to **Customers** and verify the customer appears
-5. Modify an Account field and wait ~10 seconds — QB should update
-6. Create an Invoice linked to the Account and save — it should appear in QB
+Set the site URL in EspoCRM: **Admin → Settings → Site URL** → `https://cake.local:8443`
 
 ## Xero Integration Setup
 
-### Step 1 — Create a Xero App
+### Step 1 — Create a Xero Developer App
 
 1. Visit [developer.xero.com](https://developer.xero.com)
-2. Sign in with your Xero account (create one if needed)
-3. Go to **My Applications** → **Create app**
-4. Enter an app name (e.g., "EspoCRM-Xero")
-5. Select **OAuth 2.0**
-6. In **Redirect URIs**, add:
+2. Sign in and go to **My Applications → New app**
+3. Choose **OAuth 2.0**
+4. Under **Redirect URIs**, add:
    ```
-   https://cake.local:8443?entryPoint=XeroOauthCallback
+   https://your-espocrm-domain.com?entryPoint=XeroOauthCallback
    ```
-   (Note: HTTP is not supported by Xero — HTTPS is mandatory)
-7. In **Scopes**, select:
+   > Note: Xero requires HTTPS — HTTP redirect URIs are rejected.
+5. Under **Scopes**, select:
    - `accounting.contacts`
    - `accounting.invoices`
    - `accounting.payments`
-8. Note the:
-   - `Client ID`
-   - `Client Secret`
-9. Save the app
+   - `offline_access`
+6. Note your **Client ID** and **Client Secret**
 
-### Step 2 — Configure in EspoCRM
+### Step 2 — Find Your Default Account Code
 
-1. Navigate to **Administration → Integrations → Xero**
+Xero requires every invoice line item to reference a chart-of-accounts code.
+
+In Xero: **Accounting → Chart of Accounts** → note the **Code** column for your income account
+(e.g., `200` for Sales Revenue, `500` for Consulting Services).
+
+### Step 3 — Configure in EspoCRM
+
+1. Navigate to **Admin → Integrations → Xero**
 2. Toggle **Enabled** to on
-3. Paste the `Client ID` and `Client Secret`
-4. Optionally set `defaultAccountCode` (e.g., "200" for sales revenue) — used when creating invoices
+3. Enter **Client ID** and **Client Secret**
+4. Enter **Default Account Code** (e.g., `200`)
 5. Click **Save**
 
-### Step 3 — Authorize with Xero
+### Step 4 — Authorize with Xero
 
 1. On the Xero integration page, click **Connect to Xero**
 2. A popup opens the Xero authorization URL
 3. Sign in with your Xero account and select the organisation to connect
 4. Approve the requested scopes
-5. The popup closes; the integration page refreshes and populates:
-   - `tenantId` (Xero organization ID)
-   - `connectedAt` (timestamp)
+5. The popup closes; the integration page refreshes and shows:
+   - `tenantId` (Xero organisation UUID)
+   - `connectedAt` (authorization timestamp)
 
-Note: If you have multiple Xero organisations, only the first authorized organisation is stored. Multiple organisations are not yet supported.
+> If you have multiple Xero organisations, only the first authorized one is stored.
+> Multi-organisation support is a known future enhancement.
 
-### Step 4 — Create Scheduled Jobs
+### Step 5 — Create Scheduled Jobs
 
-In **Administration → Scheduled Jobs**, add these two jobs:
+In **Admin → Scheduled Jobs**, create these two jobs:
 
-| Job Class | Schedule | Purpose |
-|-----------|----------|---------|
-| `Espo\Modules\Xero\Jobs\SyncFromXero` | `0 2 * * *` (2 AM daily) | Pull contacts and payments from Xero |
-| `Espo\Modules\Xero\Jobs\ReconcileXero` | `0 3 * * *` (3 AM daily) | Push modified Accounts/Invoices to Xero |
+| Job Name | Schedule | Purpose |
+|---|---|---|
+| Xero: Sync from Xero | `0 2 * * *` (2:00 AM daily) | Pull Xero contact updates and payments |
+| Xero: Reconcile | `15 2 * * *` (2:15 AM daily) | Push modified Accounts/Invoices to Xero |
 
-You can also run these manually via **Administration → Integrations → Xero** and click **Run Sync**.
+Run Reconcile 15 minutes after Sync so conflicts pulled from Xero are applied before the outbound push.
 
-### Step 5 — Verify Integration
+You can also trigger either job manually from **Admin → Integrations → Xero → Run Sync**.
 
-1. Create or edit an Account in EspoCRM
-2. Fill in `name`, `emailAddress`, and save
-3. Within 10 seconds, the `xeroContactId` field should auto-populate
-4. In Xero, go to **Contacts** and verify the contact appears
-5. Modify an Account field and wait ~10 seconds — Xero should update
-6. Create an Invoice linked to the Account, set `status=Draft`, and save — it should appear in Xero
+### Step 6 — Verify Integration
+
+1. Create or edit an Account in EspoCRM with `name` and `emailAddress`, then save
+2. Within 10 seconds, `xeroContactId` should auto-populate (check via Edit mode or the Xero panel)
+3. In Xero: **Contacts** → verify the contact appears
+4. Edit the Account name and save → Xero contact should update
+5. Create an Invoice linked to the Account with status `Draft` and save
+6. In Xero: **Invoices** → verify the invoice appears (status: DRAFT)
 
 ## Frontend Transpilation
 
-Custom module JavaScript/TypeScript (QuickBooks and Xero views) is transpiled to AMD modules before deployment. This is automatic during the development workflow:
+Custom module JavaScript is transpiled to AMD modules at build time. This is required when
+editing the source files under `client/custom/modules/xero/src/`.
 
 ```bash
-# Transpile all custom modules (auto-run on npm install)
-npm run transpile
+# Transpile all custom modules (from EspoCRM root directory)
+node js/transpile.js
 
-# Transpile a single file (after editing it)
-npm run transpile -- -f client/custom/modules/quick-books/src/views/admin/integrations/quick-books.js
+# Transpile a specific file
+node js/transpile.js -f client/custom/modules/xero/src/views/admin/integrations/xero.js
 ```
 
-The transpiler outputs to:
-- QB: `client/custom/modules/quick-books/lib/transpiled/src/`
-- Xero: `client/custom/modules/xero/lib/transpiled/src/`
+Output goes to `client/custom/modules/xero/lib/transpiled/src/`. The release package already
+contains transpiled files; transpilation is only needed during development.
 
-These are served by the browser loader without further processing.
-
-## Useful CLI Commands
+## CLI Reference
 
 ```bash
 # Rebuild metadata, cache, and schema
-php rebuild.php
+php command.php rebuild
 
 # Clear cache only (faster than rebuild)
 php command.php clear-cache
 
-# List all CLI commands
-php command.php --help
-
-# Run a specific job manually
-php command.php run-job --job-class="Espo\Modules\QuickBooks\Jobs\SyncFromQuickBooks"
+# Run sync jobs manually
 php command.php run-job --job-class="Espo\Modules\Xero\Jobs\SyncFromXero"
+php command.php run-job --job-class="Espo\Modules\Xero\Jobs\ReconcileXero"
+
+# Get/set config values
+php command.php config:get --name=siteUrl
+php command.php config:set --name=someKey --value=someValue
 
 # Check database connection
 php command.php db:check
@@ -303,135 +233,122 @@ php command.php db:check
 # Set admin password
 php command.php set-password --user-name=admin
 
-# Get/set config values
-php command.php config:get --name=siteUrl
-php command.php config:set --name=someKey --value=someValue
+# List all commands
+php command.php --help
 ```
 
 ## Running Tests
 
-### PHP Unit Tests
+Tests use EspoCRM's vendor PHPUnit. Set `ESPO_PATH` to your EspoCRM installation.
 
 ```bash
-# Install dev dependencies (if not already done)
-composer install
+# Run the full Xero test suite (87 tests)
+ESPO_PATH=/path/to/espocrm \
+  /path/to/espocrm/vendor/bin/phpunit \
+  --configuration phpunit.xml \
+  --no-coverage
 
-# Run QuickBooks module tests only
-vendor/bin/phpunit tests/unit/Espo/Modules/QuickBooks/
-
-# Run Xero module tests only
-vendor/bin/phpunit tests/unit/Espo/Modules/Xero/
-
-# Run both in one go
-vendor/bin/phpunit --filter "QuickBooks|Xero"
-
-# Full unit suite
-vendor/bin/phpunit --testsuite unit
+# Run a specific test file
+ESPO_PATH=/path/to/espocrm \
+  /path/to/espocrm/vendor/bin/phpunit \
+  tests/unit/Espo/Modules/Xero/XeroServiceFieldMappingTest.php
 ```
-
-### Frontend Tests (Jasmine Browser)
-
-Browser-based tests require the dev server running:
-
-```bash
-# Start dev server on port 8080
-npm run serve
-
-# In another terminal, run tests
-npm test
-```
-
-Tests run in a browser context and include views, hooks, and AMD loader behavior.
 
 ## Project Structure
 
 ```
-espocrm/
-├── custom/Espo/Modules/
-│   ├── QuickBooks/          (order: 15)
-│   │   ├── Services/        (QB API client)
-│   │   ├── Hooks/           (afterSave hooks for Account, Contact, Invoice)
-│   │   ├── Jobs/            (SyncFromQuickBooks, ReconcileQuickBooks)
-│   │   ├── EntryPoints/     (OAuth callback)
-│   │   ├── Controllers/     (initOAuth, runSync actions)
-│   │   └── Resources/       (metadata, i18n)
-│   └── Xero/                (order: 16)
-│       ├── Services/        (Xero API client)
-│       ├── Hooks/           (afterSave hooks for Account, Contact, Invoice)
-│       ├── Jobs/            (SyncFromXero, ReconcileXero)
-│       ├── EntryPoints/     (OAuth callback)
-│       ├── Controllers/     (initOAuth, runSync actions)
-│       └── Resources/       (metadata, i18n)
-├── client/custom/modules/
-│   ├── quick-books/
-│   │   ├── src/             (TypeScript views)
-│   │   └── lib/transpiled/  (compiled AMD modules)
-│   └── xero/
-│       ├── src/             (TypeScript views)
-│       └── lib/transpiled/  (compiled AMD modules)
-├── data/
-│   ├── config.php           (auto-generated; do not edit)
-│   ├── logs/                (espo.log contains all sync errors)
-│   ├── cache/               (cleared on rebuild)
-│   └── upload/              (user-uploaded files)
-├── js/transpile.js          (transpiler for custom modules)
-└── rebuild.php              (runs rebuild process)
+espocrm-xero/
+├── custom/Espo/Modules/Xero/   Server-side PHP module
+│   ├── Controllers/             initOAuth, runSync
+│   ├── EntryPoints/             OAuth callback
+│   ├── Hooks/                   afterSave hooks (Account, Contact, Invoice)
+│   ├── Jobs/                    SyncFromXero, ReconcileXero
+│   ├── Services/                XeroService (all API calls)
+│   ├── Tools/                   ConflictResolver
+│   └── Resources/               Metadata, layouts, i18n
+├── client/custom/modules/xero/  Frontend AMD module
+│   ├── src/                     JS source files
+│   └── lib/transpiled/          Compiled AMD output
+├── tests/unit/                  PHPUnit test suite
+├── scripts/
+│   ├── install.sh               Installation script
+│   └── release.sh               Release packaging script
+├── docs/                        Documentation
+└── releases/                    Built release ZIPs
 ```
 
-## Environment Variables & Config
+## Environment & Config
 
-Critical config values (set in **Administration → Settings**):
+Critical config values (set via **Admin → Settings**):
 
 | Key | Example | Purpose |
-|-----|---------|---------|
-| `siteUrl` | `https://cake.local:8443` | Used by QB/Xero OAuth callbacks and API endpoints |
+|---|---|---|
+| `siteUrl` | `https://cake.local:8443` | Used in OAuth redirect URI construction |
 | `dateFormat` | `YYYY-MM-DD` | Date display format |
-| `timeFormat` | `HH:mm` | Time display format |
 | `timezone` | `UTC` | Affects scheduled job timing |
 
 ## Logs & Debugging
 
-- **All errors**: `/home/coreconduit/espocrm/data/logs/espo.log`
-- **Sync warnings**: Look for "QB sync failed" or "Xero sync failed" in espo.log
-- **DB queries**: Enable in config for verbose output (slows performance; debug only)
-- **Browser console**: Check for JavaScript errors when testing views
+- **All sync events**: `data/logs/espo.log`
+- **Sync errors in UI**: Admin → Integrations → Xero → `lastSyncError` field
+- **Watch sync activity**: `tail -f data/logs/espo.log | grep -i xero`
 
 ## Troubleshooting
 
-### QB/Xero OAuth Fails with "Invalid Redirect URI"
+### OAuth Fails: "Invalid Redirect URI"
 
-**Cause**: `siteUrl` is not set correctly, or HTTPS cert is self-signed and browser rejects it.
+**Cause:** `siteUrl` is not HTTPS, doesn't match the registered URI, or the browser hasn't
+trusted the dev certificate.
 
-**Fix**:
-1. Verify `siteUrl` in **Administration → Settings** is exactly `https://cake.local:8443`
-2. For self-signed certs (mkcert), visit `https://cake.local:8443` in your browser and accept the warning
-3. Clear browser cache and try OAuth again
+**Fix:**
+1. Verify `siteUrl` is exactly `https://cake.local:8443` (or your production domain)
+2. For mkcert (dev): visit the URL in your browser and accept the security warning
+3. Verify the exact URI registered in developer.xero.com matches your siteUrl
 
 ### Sync Jobs Do Not Run
 
-**Cause**: Cron is not calling `cron.php` every minute.
+**Cause:** Cron is not configured, or scheduled jobs are disabled.
 
-**Fix**:
-1. Verify cron entry: `sudo crontab -l`
-2. Test manually: `php /home/coreconduit/espocrm/cron.php`
-3. Check logs: `tail -f /home/coreconduit/espocrm/data/logs/espo.log`
+**Fix:**
+1. Verify cron: `sudo crontab -l | grep cron.php`
+2. Test manually: `php /path/to/espocrm/cron.php`
+3. Verify both jobs are enabled in **Admin → Scheduled Jobs**
+4. Check `data/logs/espo.log` for scheduler errors
 
-### "Controller 'Invoice' does not exist"
+### xeroContactId Not Populating After Save
 
-**Cause**: The Invoice entity has no REST API controller.
+**Cause:** The hook fired but the Xero API call failed (check the log).
 
-**Status**: This is a known gap. Invoices are only accessible through sync jobs and admin UI, not via REST API (`GET /api/v1/Invoice`).
+**Fix:**
+1. Check `data/logs/espo.log` for "Xero Account sync failed"
+2. Verify the integration is connected (tenantId is set)
+3. Verify `clientId`/`clientSecret` are correct
+4. Try reconnecting via **Admin → Integrations → Xero → Connect to Xero**
 
-**Workaround**: Create invoices via the admin UI; sync to QB/Xero via scheduled jobs.
+### Invoice Sync Fails: "No Xero Contact ID"
 
-### Hooks Not Firing on Save
+**Cause:** The linked Account has not been pushed to Xero yet.
 
-**Cause**: Account/Contact/Invoice hooks are skipped if the save option `skipXeroSync` or `skipQuickBooksSync` is set.
+**Fix:** Save the Account record once (triggers the hook), then save the Invoice again.
+Or wait for the next nightly Reconcile run.
 
-**Fix**: Ensure you're not manually saving with these options unless you intend to skip QB/Xero sync.
+### Xero API Rejects Invoice: Account Code Error
 
-### Token Expiration Errors in Logs
+**Cause:** `defaultAccountCode` is not set or references an inactive/non-existent account.
 
-**Cause**: `refreshToken` has expired (QB ~101 days, Xero ~60 days).
+**Fix:** In **Admin → Integrations → Xero**, set a valid `defaultAccountCode`.
+Use the Code column from **Xero → Accounting → Chart of Accounts**.
 
-**Fix**: Reconnect via **Administration → Integrations** → click **Connect to [QB/Xero]** again.
+### Token Expiration Errors
+
+**Cause:** Refresh token expired (~60 days of inactivity).
+
+**Fix:** Reconnect via **Admin → Integrations → Xero → Connect to Xero**.
+
+### Payments Not Marking Invoices as Paid
+
+**Cause:** The invoice was created in Xero directly, not pushed from EspoCRM, so there is
+no matching `xeroInvoiceId` in EspoCRM.
+
+**Fix:** Only invoices pushed from EspoCRM (which have a `xeroInvoiceId`) can be matched to
+Xero payments. Create invoices in EspoCRM and let the sync push them to Xero.

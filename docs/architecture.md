@@ -2,12 +2,10 @@
 
 ## Overview
 
-The deployment is a self-hosted EspoCRM 9.3.7 instance extended with two custom accounting integration modules:
+This is a self-hosted EspoCRM 9.x instance extended with the **Xero** custom accounting module,
+providing bidirectional sync between EspoCRM CRM data and Xero Accounting.
 
-1. **QuickBooks Online (QB)** — full bidirectional sync for Customers, Invoices, and Payments
-2. **Xero** — full bidirectional sync for Contacts, Invoices, and Payments
-
-Both modules are isolated in `custom/Espo/Modules/` and do not modify core EspoCRM files. They follow the same architecture pattern for consistency and maintainability.
+The module is fully isolated in `custom/Espo/Modules/Xero/`. It does not modify any core EspoCRM files.
 
 ## Request Lifecycle
 
@@ -16,7 +14,7 @@ Browser Request → nginx (HTTPS on 8443)
                   ↓
               index.php → Slim Router
                   ↓
-          EspoCRM/Custom Controller (REST API)
+          EspoCRM / Custom Controller (REST API)
                   ↓
           Service + ORM Layer
                   ↓
@@ -32,83 +30,62 @@ cron.php
         ↓
 EspoCRM Job Dispatcher
         ↓
-QuickBooks/Xero Background Job
+Xero Background Job (SyncFromXero or ReconcileXero)
         ↓
-Service + Database
+XeroService + Database
 ```
 
 ## Module Structure
 
-Both QB and Xero follow identical patterns. Here's the QuickBooks layout; Xero is identical with different class namespaces:
-
 ```
-custom/Espo/Modules/QuickBooks/
-├── Clients/                            (reserved; not used)
+custom/Espo/Modules/Xero/
 ├── Controllers/
-│   └── QuickBooksIntegration.php      API: initOAuth, runSync
+│   └── XeroIntegration.php      POST /api/v1/XeroIntegration/initOAuth
+│                                POST /api/v1/XeroIntegration/runSync
 ├── EntryPoints/
-│   └── QuickBooksOauthCallback.php    OAuth2 redirect handler
-├── Entities/
-│   └── Invoice.php                     Invoice entity class
+│   └── XeroOauthCallback.php    ?entryPoint=XeroOauthCallback (no auth)
 ├── Hooks/
-│   ├── Account/Sync.php               afterSave hook
-│   ├── Contact/Sync.php               afterSave hook
-│   └── Invoice/Sync.php               afterSave hook
+│   ├── Account/XeroSync.php     afterSave → upsertContact
+│   ├── Contact/XeroSync.php     afterSave → upsertContact
+│   └── Invoice/XeroSync.php     afterSave → upsertInvoice or voidInvoice
 ├── Jobs/
-│   ├── SyncFromQuickBooks.php         Pull job
-│   └── ReconcileQuickBooks.php        Push job
+│   ├── SyncFromXero.php         Nightly pull (contacts + payments)
+│   └── ReconcileXero.php        Nightly push (batch 25 records)
 ├── Services/
-│   └── QuickBooksService.php          QB HTTP API client
+│   └── XeroService.php          All Xero API calls + token refresh
 ├── Tools/
-│   └── ConflictResolver.php           Timestamp-based conflict resolution
+│   └── ConflictResolver.php     Last-modified-wins; pure function, no I/O
 └── Resources/
-    ├── module.json                     order: 15; jsTranspiled: true
+    ├── module.json               order: 16; jsTranspiled: true
+    ├── routes.json               API route declarations
     ├── metadata/
-    │   ├── integrations/QuickBooks.json   Admin UI fields
-    │   ├── app/scheduledJobs.json        Job registration
-    │   ├── entityDefs/
-    │   │   ├── Account.json             QB fields on Account
-    │   │   ├── Contact.json             QB fields on Contact
-    │   │   └── Invoice.json             QB Invoice entity schema
-    │   ├── clientDefs/
-    │   │   └── Invoice.json             Admin UI config for Invoice
-    │   ├── scopes/
-    │   │   └── Invoice.json             Invoice entity scopes
-    │   └── routes.json                  OAuth callback routing
-    └── i18n/en_US/
-        ├── Integration.json            Integration field labels
-        └── Invoice.json                Invoice field labels
+    │   ├── integrations/Xero.json      Admin UI fields + view binding
+    │   ├── app/scheduledJobs.json      Job registration
+    │   ├── entityDefs/{Account,Contact,Invoice}.json
+    │   ├── clientDefs/{Account,Contact,Invoice}.json
+    │   └── scopes/Invoice.json
+    └── i18n/en_US/{Integration,Invoice}.json
 ```
 
-Xero is identical:
-- `custom/Espo/Modules/Xero/` (order: 16)
-- Classes named `Xero*` instead of `QuickBooks*`
-- Hooks named `XeroSync` instead of `Sync` (to avoid EspoCRM's deduplication bug)
-
-## Frontend Structure
-
-Custom module JavaScript/TypeScript views are stored in source form and transpiled to AMD modules:
+Frontend (AMD modules, transpiled from JS source):
 
 ```
-client/custom/modules/quick-books/
-├── src/
-│   └── views/admin/integrations/
-│       └── quick-books.js              TypeScript view with "Connect" button
-└── lib/transpiled/src/
-    └── views/admin/integrations/
-        └── quick-books.js              Compiled AMD module (auto-generated)
+client/custom/modules/xero/
+├── src/views/admin/integrations/xero.js      Source: Connect + Sync buttons
+├── src/views/panels/xero-status.js           Source: side panel view
+├── lib/transpiled/src/                        Compiled AMD output
+└── res/templates/panels/xero-status.tpl      Handlebars template
 ```
 
-Same for Xero. The transpiler (`js/transpile.js`) converts:
-- TypeScript → JavaScript
-- Module system → AMD
-- Applies Babel plugins for browser compatibility
+### Hook Naming
 
-The loader fetches transpiled modules from `lib/transpiled/src/` at runtime.
+Hooks are named `XeroSync` (not `Sync`) to avoid EspoCRM's hook class-name deduplication bug.
+EspoCRM caches hooks by short class name; if two hooks share the same name, only one is registered.
+The `Xero` prefix ensures all three hooks (Account, Contact, Invoice) are distinct.
 
 ## Sync Data Flow
 
-### Push (EspoCRM → QB/Xero) — Real-Time via Hooks
+### Push (EspoCRM → Xero) — Real-Time via Hooks
 
 When a user saves an Account, Contact, or Invoice in EspoCRM:
 
@@ -119,116 +96,90 @@ EspoCRM ORM.saveEntity()
         ↓
 Fire afterSave hooks (order 20)
         ↓
-Hook checks if this save has skipQuickBooksSync or skipXeroSync option
+Hook checks if this save has skipXeroSync option set → if yes, return
         ↓
-If not set:
-  - Inject QuickBooksService or XeroService
-  - Call upsertCustomer() or upsertInvoice()
-  - Service checks and refreshes access token (30-second margin)
-  - HTTP POST to QB/Xero API
-  - Save returned Id + SyncToken back to entity
-  - Save with skipQuickBooksSync=true to prevent re-entry
+Inject XeroService
+Call upsertContact() or upsertInvoice()
         ↓
-User gets immediate feedback in admin UI
-(sync warning is logged to espo.log if API fails)
+getAccessToken() → check expiry with 30-second margin → refresh if needed
+        ↓
+HTTP POST to Xero API
+        ↓
+On success:
+  - Write back xeroContactId / xeroInvoiceId / xeroSyncedAt
+  - Save with skipXeroSync=true (loop guard prevents re-entry)
+        ↓
+On failure:
+  - Log warning (warning level)
+  - CRM save still completes; Xero failure is non-blocking
 ```
 
-If the QB/Xero API call fails (network error, rate limit, etc.):
-- Failure is caught and logged at `warning` level
-- CRM save still succeeds (the Account/Invoice is saved locally)
-- Admin can retry via **Administration → Integrations → [QB/Xero] → Run Sync**
+### Pull (Xero → EspoCRM) — Nightly via Job
 
-### Pull (QB/Xero → EspoCRM) — Nightly via Job
-
-The `SyncFromQuickBooks` and `SyncFromXero` jobs run daily (default: 2 AM) and fetch all updated records since the last sync:
+`SyncFromXero` runs daily at 2:00 AM:
 
 ```
-Scheduled Job fires
-        ↓
 Read lastSyncAt from Integration entity
-(default: 7 days ago on first run)
+(default: now − 7 days on first run)
         ↓
-QB/Xero API: Get all Customers/Contacts updated since lastSyncAt
+GET /Contacts (If-Modified-Since header)
         ↓
-For each customer/contact:
-  - Find matching Account by qbCustomerId or xeroContactId
-  - Check ConflictResolver: is QB/Xero newer than qbSyncedAt / xeroSyncedAt?
-  - If yes: update Account fields (name, email, phone, etc.)
-  - Save with skipQuickBooksSync=true
+For each contact:
+  - Find matching Account/Contact by xeroContactId
+  - ConflictResolver: is Xero newer than xeroSyncedAt?
+  - If yes: update fields → save(skipXeroSync=true)
         ↓
-QB/Xero API: Get all Payments since lastSyncAt
+GET /Payments (where=Date>=DateTime(lastSyncAt))
         ↓
 For each payment:
-  - Find linked QB/Xero Invoice
-  - Find matching EspoCRM Invoice by qbInvoiceId or xeroInvoiceId
-  - Set status=Paid, store payment ID and date
-  - Save with skipQuickBooksSync=true / skipXeroSync=true
+  - Find EspoCRM Invoice by xeroInvoiceId
+  - Set status=Paid, store xeroPaymentId + xeroPaymentDate
+  - save(skipXeroSync=true)
         ↓
 Write lastSyncAt = now() to Integration entity
-        ↓
-Log "sync complete" or error to espo.log
 ```
 
-### Reconciliation — Nightly via Job (After Pull)
+### Reconciliation (Nightly via Job, After Pull)
 
-After the pull job completes, the `ReconcileQuickBooks` or `ReconcileXero` job pushes any local changes not yet synced:
+`ReconcileXero` runs at 2:15 AM (15 minutes after SyncFromXero). Batch size: **25 records** per run.
 
 ```
-Reconciliation Job fires
+Query Accounts WHERE xeroContactId IS NULL → upsertContact() for each (batch 25)
         ↓
-Find Accounts where modifiedAt > qbSyncedAt / xeroSyncedAt
-(these were modified after the last pull, so EspoCRM version is newer)
+Query Accounts WHERE xeroContactId IS NOT NULL
+  → For each: if modifiedAt > xeroSyncedAt → upsertContact()
         ↓
-Call upsertCustomer() for each (push to QB/Xero)
+Query Invoices WHERE status NOT IN (Paid, Voided)
+  → For each: if modifiedAt > xeroSyncedAt → upsertInvoice()
         ↓
-Find Invoices where status ≠ Paid/Voided and modifiedAt > qbSyncedAt
-        ↓
-Call upsertInvoice() for each (push to QB/Xero)
-        ↓
-Update sync timestamps on success
-        ↓
-Log completion or error
+Write lastSyncError to Integration entity
 ```
-
-Batch size: 50 records per run (configurable).
 
 ## Conflict Resolution
 
-**Strategy**: Last-modified-wins, with EspoCRM tie-breaking.
+**Strategy**: Last-modified-wins with EspoCRM as the tie-break winner.
 
-```
-ConflictResolver::resolve(?string $qbLastUpdated, ?string $espoSyncedAt): string
-```
+`ConflictResolver::resolve(?string $xeroLastUpdated, ?string $espoSyncedAt): string`
 
-Returns one of:
-- `WINNER_QB`: QB API value is newer → pull QB data into EspoCRM
-- `WINNER_ESPO`: EspoCRM value is newer → push EspoCRM data to QB
-- `WINNER_NONE`: No sync metadata available → skip
+| Scenario | Result |
+|---|---|
+| Both null | `WINNER_NONE` — skip |
+| Only Xero timestamp | `WINNER_XERO` |
+| Only EspoCRM timestamp | `WINNER_ESPO` |
+| Xero newer | `WINNER_XERO` |
+| EspoCRM newer | `WINNER_ESPO` |
+| Tied | `WINNER_ESPO` |
 
-Logic:
-- Both null → NONE (nothing to compare)
-- Only QB timestamp → QB wins
-- Only EspoCRM timestamp → EspoCRM wins
-- Both present → newer timestamp wins
-- Timestamps equal → EspoCRM wins (arbitrary but consistent)
-
-Example:
-```
-QB Account last updated: 2026-05-26 10:00:00 UTC
-EspoCRM Account qbSyncedAt: 2026-05-26 09:00:00 UTC
-Result: QB wins → pull QB data
-```
-
-Implementation: `custom/Espo/Modules/QuickBooks/Tools/ConflictResolver.php` (pure function, fully tested, no I/O).
+Implementation: `Tools/ConflictResolver.php` — pure function, fully tested, no I/O.
 
 ## Hook Loop Guard
 
-All internal saves after sync use:
+All internal saves triggered by sync use:
 
 ```php
 $this->entityManager->saveEntity($entity, [
-    'skipQuickBooksSync' => true,
-    'silent' => true
+    'skipXeroSync' => true,
+    'silent' => true,
 ]);
 ```
 
@@ -237,330 +188,190 @@ Hooks check this flag before firing:
 ```php
 public function afterSave(Entity $entity, SaveOptions $options): void
 {
-    if ($options->get('skipQuickBooksSync')) {
-        return;  // Skip QB sync for this save
+    if ($options->get('skipXeroSync')) {
+        return;
     }
-    // ... perform QB sync
+    // ... perform sync
 }
 ```
 
-This prevents infinite loops: QB sync writes the QB ID back to the entity → would normally trigger afterSave again → but the flag blocks it.
-
 ## OAuth Token Storage
 
-Tokens are stored in the `Integration` entity (`id=QuickBooks` or `id=Xero`) in the flexible `data` JSON column. All values are persisted via the ORM.
+Tokens are stored in the `Integration` entity (`id = 'Xero'`) via the flexible `data` JSON column.
 
-### QuickBooks Integration Fields
-
-| Key | Type | Purpose |
-|-----|------|---------|
-| `clientId` | varchar | QB app Client ID (from developer.intuit.com) |
-| `clientSecret` | password | QB app Client Secret (encrypted at rest) |
-| `accessToken` | — | Bearer token; expires ~1 hour |
-| `refreshToken` | — | Long-lived refresh token; expires ~101 days |
-| `accessTokenExpiresAt` | datetime | Checked with 30-second margin for proactive refresh |
-| `realmId` | varchar(64) | QB company ID; required in all API URLs |
-| `connectedAt` | datetime | When OAuth was last completed |
-| `lastSyncAt` | datetime | Last successful pull job timestamp |
-| `oauthState` | varchar(64) | CSRF token generated during initOAuth; validated in callback |
-| `lastSyncError` | text | Last error message (for debugging) |
-
-### Xero Integration Fields
-
-| Key | Type | Purpose |
-|-----|------|---------|
-| `clientId` | varchar | Xero app Client ID (from developer.xero.com) |
-| `clientSecret` | password | Xero app Client Secret (encrypted at rest) |
-| `accessToken` | — | Bearer token; expires ~30 minutes |
-| `refreshToken` | — | Long-lived refresh token; expires ~60 days |
-| `accessTokenExpiresAt` | datetime | Checked with 30-second margin for proactive refresh |
-| `tenantId` | varchar(64) | Xero organisation ID (from /connections endpoint) |
-| `connectedAt` | datetime | When OAuth was last completed |
-| `lastSyncAt` | datetime | Last successful pull job timestamp |
-| `defaultAccountCode` | varchar(32) | Account code for unspecified invoices (e.g., "200") |
-| `oauthState` | varchar(64) | CSRF token generated during initOAuth; validated in callback |
-| `lastSyncError` | text | Last error message (for debugging) |
+| Field | Type | Purpose |
+|---|---|---|
+| `clientId` | varchar | Xero app Client ID |
+| `clientSecret` | password | Encrypted at rest |
+| `accessToken` | text | Bearer token; ~30 minutes; auto-refreshed |
+| `refreshToken` | text | Long-lived; ~60 days |
+| `accessTokenExpiresAt` | datetime | Checked with 30-second margin |
+| `tenantId` | varchar(64) | Xero organisation UUID |
+| `connectedAt` | datetime | Last successful OAuth timestamp |
+| `lastSyncAt` | datetime | Pull job watermark |
+| `defaultAccountCode` | varchar(32) | Account code for invoice line items |
+| `oauthState` | varchar(64) | CSRF token; cleared after OAuth completes |
+| `lastSyncError` | text | Last reconcile error; shown in admin UI |
 
 ## OAuth Flow
 
-Both QB and Xero use OAuth 2.0 with authorization code grant. The flow is initiated by the "Connect" button in the admin UI:
-
 ```
-1. Admin clicks "Connect to QuickBooks" / "Connect to Xero"
-   ↓
-2. Frontend calls POST /api/v1/QuickBooksIntegration/action/initOAuth
-   (or XeroIntegration for Xero)
-   ↓
-3. Controller generates random state = bin2hex(random_bytes(16))
-   Saves state to Integration.oauthState
-   Returns state to frontend
-   ↓
-4. Frontend builds authorization URL:
-   https://appcenter.intuit.com/connect/oauth2?
-     client_id={CLIENT_ID}
-     &response_type=code
-     &scope={SCOPES}
-     &redirect_uri=https://cake.local:8443?entryPoint=QuickBooksOauthCallback
-     &state={STATE}
-   ↓
-5. Frontend opens popup to this URL
-   ↓
-6. User sees QB/Xero login + scope approval screen
-   ↓
-7. User approves → QB/Xero redirects to:
-   https://cake.local:8443?entryPoint=QuickBooksOauthCallback
-     &code={AUTHORIZATION_CODE}
-     &realmId={QB_COMPANY_ID}  (QB only)
-     &state={STATE}
-   ↓
-8. EntryPoint receives callback:
-   - Validates state against Integration.oauthState
-   - Exchanges code for tokens via HTTP POST to token endpoint
-   - For QB: stores realmId, accessToken, refreshToken, accessTokenExpiresAt
-   - For Xero: calls /connections endpoint to get tenantId, stores tokens
-   - Saves Integration entity
-   - Renders result page with success message
-   ↓
-9. Frontend popup posts message to opener window:
-   window.opener.postMessage({success: true})
-   ↓
-10. Popup closes; admin UI refreshes Integration form
-    realmId / tenantId now visible
+1. Admin clicks "Connect to Xero"
+2. POST /api/v1/XeroIntegration/initOAuth
+   → state = bin2hex(random_bytes(16))
+   → stored in Integration.oauthState
+   → returned to frontend
+3. Frontend builds Xero authorization URL with state param
+4. Frontend opens popup to authorization URL
+5. User approves scopes
+6. Xero redirects to ?entryPoint=XeroOauthCallback
+7. EntryPoint validates state → exchanges code for tokens
+   → fetches tenantId from /connections
+   → clears oauthState
+8. Popup posts success message; admin UI refreshes
 ```
 
 ## Token Refresh
 
-Both QB and Xero tokens expire. Refresh happens automatically inside `getAccessToken()`:
+Refresh happens inside `getAccessToken()`:
 
 ```php
 private function getAccessToken(Integration $integration): string
 {
     $expiresAt = $integration->get('accessTokenExpiresAt');
-    
-    // Refresh if within 30 seconds of expiry
+
     if ($expiresAt && isExpiringSoon($expiresAt, 30)) {
         $this->refreshAccessToken($integration);
     }
-    
+
     return $integration->get('accessToken');
 }
 ```
 
-The refresh flow:
-```
-Check if token expires within 30 seconds
-        ↓
-If yes:
-  HTTP POST to token endpoint with grant_type=refresh_token
-  + clientId and clientSecret (or Basic auth for QB)
-  ↓
-  Receive new accessToken + new accessTokenExpiresAt
-  ↓
-  Update Integration entity
-  ↓
-  Return new token
-```
+Refresh flow:
 
-If the refresh fails (credentials invalid, network error, etc.):
-- QB sync fails with an Error logged to espo.log
-- Admin must reconnect via the UI
+```
+POST https://identity.xero.com/connect/token
+  grant_type=refresh_token
+  refresh_token={REFRESH_TOKEN}
+  client_id + client_secret
+        ↓
+Receive: accessToken, refreshToken (rotated), expiresIn (30 min)
+        ↓
+Update Integration entity
+        ↓
+Return new token
+```
 
 ## Frontend
 
-EspoCRM uses an AMD module loader (RequireJS-compatible) for its client-side code. Custom modules (QB and Xero) are loaded via the same mechanism.
+EspoCRM uses AMD (RequireJS-compatible) for its client-side code. The Xero module provides:
 
-### Frontend View Structure
+- `src/views/admin/integrations/xero.js` — extends `IntegrationsEditView`, adds Connect and Sync buttons
+- `src/views/panels/xero-status.js` — side panel on Account/Contact detail views
 
-Each module provides a custom Integration admin view:
+Source files are transpiled to AMD modules at build time:
 
 ```
-client/custom/modules/quick-books/src/views/admin/integrations/quick-books.js
-
-Extends Espo.Ui.View
-Provides:
-  - "Connect to QuickBooks" button
-  - OAuth redirect logic
-  - Form validation
-  - Run Sync button
+src/views/.../xero.js
+        ↓
+Babel (TypeScript plugin + AMD plugin)
+        ↓
+lib/transpiled/src/views/.../xero.js
+        ↓
+Browser AMD loader (require())
 ```
 
-When the "Connect" button is clicked:
-1. JavaScript calls API endpoint `QuickBooksIntegration/action/initOAuth`
-2. Receives `state` token
-3. Builds full QB OAuth URL with state parameter
-4. Opens popup
-5. Listens for postMessage from callback
-6. Closes popup and refreshes the integration form
-
-### Transpilation Pipeline
-
-TypeScript/JavaScript source files must be transpiled to AMD modules before the browser can load them.
-
-**Pipeline:**
-```
-client/custom/modules/quick-books/src/views/.../*.ts
-        ↓
-Babel transform (TypeScript plugin, AMD module plugin)
-        ↓
-client/custom/modules/quick-books/lib/transpiled/src/views/.../_.js
-        ↓
-Browser loader fetches transpiled file
-        ↓
-AMD define() function registers module with require()
-        ↓
-Integration view can now require() the module
-```
-
-**Execution:**
-```bash
-npm run transpile              # Transpile all modules
-npm run transpile -- -f file   # Transpile single file
-```
-
-Transpiler runs via `js/transpile.js` at build time and is invoked by npm scripts.
+Transpile command (from EspoCRM root): `node js/transpile.js`
 
 ## Background Job System
 
-Both QB and Xero provide two background jobs each:
+| Job | Schedule | Purpose |
+|---|---|---|
+| `SyncFromXero` | 2:00 AM daily | Pull contacts + payments from Xero |
+| `ReconcileXero` | 2:15 AM daily | Push modified Accounts + Invoices to Xero |
 
-| Job | Module | Purpose | Schedule |
-|-----|--------|---------|----------|
-| `SyncFromQuickBooks` | QB | Pull customers + payments | 2 AM daily |
-| `ReconcileQuickBooks` | QB | Push modified records | 3 AM daily |
-| `SyncFromXero` | Xero | Pull contacts + payments | 2 AM daily |
-| `ReconcileXero` | Xero | Push modified records | 3 AM daily |
+Both implement `Espo\Core\Job\JobDataLess`. Jobs are registered in
+`Resources/metadata/app/scheduledJobs.json` and appear in Admin → Scheduled Jobs.
 
-Jobs implement `Espo\Core\Job\JobDataLess` and are dispatched by EspoCRM's scheduler. The scheduler reads `ScheduledJob` records from the database and checks if they're due. If due, it invokes the job class.
-
-Job registration happens in `Resources/metadata/app/scheduledJobs.json`:
-
-```json
-{
-    "SyncFromQuickBooks": {
-        "name": "QuickBooks: Sync from QuickBooks",
-        "jobClassName": "Espo\\Modules\\QuickBooks\\Jobs\\SyncFromQuickBooks"
-    }
-}
+Job lifecycle:
+```
+System cron calls php cron.php every minute
+        ↓
+Cron handler finds all active ScheduledJob records
+        ↓
+For each: check (lastRun + interval) <= now
+  → If yes: instantiate job class via InjectableFactory
+  → Call run()
+  → Log success/failure
+  → Update lastRun
 ```
 
-This metadata is merged into the admin UI's scheduled job dropdown, allowing easy creation of new job schedules.
-
-### Job Lifecycle
-
-```
-1. System cron calls php cron.php every minute
-2. Cron handler finds all ScheduledJob records with is_active=1
-3. For each job:
-   - Check if (lastRun + interval) <= now
-   - If yes: instantiate job class via InjectableFactory
-   - Call run() method
-   - Log success/failure to espo.log
-   - Update lastRun timestamp
-4. Exit
-```
-
-Errors in a job do NOT abort the entire cron cycle. Each job's failure is logged separately.
+Job errors do **not** abort the cron cycle. Each job fails independently.
 
 ## Error Handling
 
-### Hook Errors (Real-Time Sync)
-
-All hook sync failures are caught and logged at `warning` level:
+### Hook Errors (Real-Time)
 
 ```php
 try {
-    $service->upsertCustomer('Account', $entity);
+    $service->upsertContact('Account', $entity);
 } catch (Throwable $e) {
-    $this->log->warning("QB sync failed: " . $e->getMessage());
-    // Does NOT rethrow; CRM save still completes
+    $this->log->warning("Xero Account sync failed: " . $e->getMessage());
+    // Does NOT rethrow — CRM save still completes
 }
 ```
 
-Result: User can still save Account/Invoice locally even if QB/Xero is unreachable.
-
-### Job Errors (Background Sync)
-
-Job failures are logged at `error` level and block that job's execution until manually retried or the scheduled time passes again:
+### Job Errors (Background)
 
 ```php
 try {
-    $this->syncFromQuickBooks();
+    $service->pullContactsSince($sinceDate);
 } catch (Throwable $e) {
-    $this->log->error("SyncFromQuickBooks failed: " . $e->getMessage());
-    throw $e;  // EspoCRM logs the stack trace
+    $this->log->error("Xero SyncFromXero (contacts): " . $e->getMessage());
+    $errors[] = "Contacts: " . $e->getMessage();
 }
 ```
 
-### API Errors
+### API HTTP Errors
 
-QB and Xero API calls use curl with error checking:
-
-```php
-$httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-
-if ($httpCode >= 400) {
-    $response = json_decode($body);
-    throw new Error("QB API error: " . $response->faultString);
-}
-```
-
-Common errors:
-- `401 Unauthorized` → Token expired or invalid (triggers refresh)
-- `403 Forbidden` → Missing scope or disabled integration
-- `429 Too Many Requests` → Rate limit (job retries next cycle)
-- `500 Internal Server Error` → QB/Xero service issue (job retries)
+| Code | Meaning | Handling |
+|---|---|---|
+| 401 | Token expired or invalid | Triggers proactive refresh |
+| 403 | Missing scope / integration disabled | Logged as error |
+| 429 | Rate limit exceeded | Logged; job retries next scheduled run |
+| 5xx | Xero service issue | Logged; job retries |
 
 ## Data Integrity
 
 ### Idempotency
 
-Both QB and Xero APIs support idempotent updates via sync tokens:
+Xero supports idempotent contact and invoice operations via POST. Sending the same payload twice
+is safe — Xero uses the `ContactID` / `InvoiceID` for matching.
 
-```php
-// QuickBooks example
-$payload = [
-    'Id' => $qbCustomerId,          // Set for updates
-    'SyncToken' => $qbSyncToken,    // Prevents stale updates
-    'CompanyName' => 'New Name'
-];
-```
+### Foreign Key Requirement
 
-If you save the same record twice, QB/Xero will reject the second update with a sync token mismatch error. The service catches this and logs a warning.
+Invoices require an Account with `xeroContactId` already populated. If the customer is not yet
+in Xero, the invoice sync is skipped and logged as a warning. The nightly Reconcile job retries
+both the contact and the invoice.
 
-### Foreign Keys
+### Schema Sync
 
-- Invoices require an Account with `qbCustomerId` or `xeroContactId` already set
-- If the customer is not in QB/Xero yet, the invoice sync is skipped and logged as a warning
-- The next nightly reconciliation will retry the customer, then retry the invoice
+EspoCRM auto-discovers entity schema from metadata JSON files. Running `php command.php rebuild`:
+1. Loads all metadata files
+2. Compares declared schema to actual database
+3. Creates missing tables/columns and indexes
+4. Rebuilds the metadata cache
 
-## Metadata & Schema
-
-EspoCRM auto-discovers entity schema from metadata JSON files. Custom fields on Account, Contact, and Invoice are declared in:
-
-```
-custom/Espo/Modules/QuickBooks/Resources/metadata/entityDefs/Account.json
-custom/Espo/Modules/QuickBooks/Resources/metadata/entityDefs/Contact.json
-custom/Espo/Modules/QuickBooks/Resources/metadata/entityDefs/Invoice.json
-```
-
-When you run `php rebuild.php`:
-1. All metadata files are loaded
-2. Schema is compared to actual database
-3. Missing tables/columns are created
-4. Indexes are added
-5. Data model is cached in `data/cache/`
-
-Modifying metadata requires rebuilding.
-
-## Summary: Core Patterns
+## Core Patterns Summary
 
 | Aspect | Pattern |
-|--------|---------|
-| **Module isolation** | `custom/Espo/Modules/{QB\|Xero}/` — no core file modifications |
-| **Real-time sync** | afterSave hooks with loop guard (`skipQuickBooksSync` option) |
-| **Scheduled sync** | Nightly jobs (cron-driven) for pull and reconciliation |
-| **Conflict resolution** | Last-modified-wins with EspoCRM tie-breaking |
-| **Error handling** | Failures logged, never abort user saves; jobs can be retried |
-| **Token management** | Stored in Integration entity JSON; auto-refresh with 30s margin |
-| **Frontend code** | TypeScript → transpiled to AMD at build time → loaded by browser |
-| **Idempotency** | Sync tokens prevent duplicate updates on QB/Xero side |
+|---|---|
+| Module isolation | `custom/Espo/Modules/Xero/` — no core file modifications |
+| Real-time sync | afterSave hooks; order=20; failures non-blocking |
+| Scheduled sync | Nightly jobs (SyncFromXero at 2 AM, ReconcileXero at 2:15 AM) |
+| Conflict resolution | Last-modified-wins; EspoCRM wins on tie |
+| Error handling | Failures logged; never abort user saves |
+| Token management | Integration entity; auto-refresh with 30s margin |
+| Frontend code | Source JS → Babel → AMD → browser |
+| Batch size | 25 records per Reconcile run (Xero rate limit headroom) |

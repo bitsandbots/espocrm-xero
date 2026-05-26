@@ -146,13 +146,16 @@ if [[ "$SKIP_TESTS" == false ]]; then
     exit 1
   fi
 
-  if ESPO_PATH="$ESPO_PATH" php "$PHPUNIT" \
-      --configuration "${PROJECT_ROOT}/phpunit.xml" \
-      --no-coverage 2>&1 | tee /tmp/phpunit-xero-output.log; then
+  ESPO_PATH="$ESPO_PATH" php "$PHPUNIT" \
+    --configuration "${PROJECT_ROOT}/phpunit.xml" \
+    --no-coverage 2>&1 | tee /tmp/phpunit-xero-output.log
+  PHPUNIT_EXIT="${PIPESTATUS[0]}"
+
+  if [[ "$PHPUNIT_EXIT" -eq 0 ]]; then
     _green "PHP tests passed"
   else
-    _red "ERROR: PHP tests failed"
-    tail -20 /tmp/phpunit-xero-output.log
+    _red "ERROR: PHP tests failed (exit $PHPUNIT_EXIT)"
+    tail -30 /tmp/phpunit-xero-output.log
     exit 1
   fi
 else
@@ -184,6 +187,16 @@ chmod +x "$STAGING_DIR/scripts/install.sh"
 if [[ -d "${PROJECT_ROOT}/docs" ]]; then
   _green "  Staging documentation..."
   cp -r "${PROJECT_ROOT}/docs" "$STAGING_DIR/docs"
+fi
+
+if [[ -f "${PROJECT_ROOT}/README.md" ]]; then
+  _green "  Staging README..."
+  cp "${PROJECT_ROOT}/README.md" "$STAGING_DIR/README.md"
+fi
+
+if [[ -f "${PROJECT_ROOT}/LICENSE" ]]; then
+  _green "  Staging LICENSE..."
+  cp "${PROJECT_ROOT}/LICENSE" "$STAGING_DIR/LICENSE"
 fi
 
 # Strip dev-only artifacts
@@ -227,6 +240,11 @@ _green "Archive created: $ZIP_FILE"
 ##############################################################################
 
 CHECKSUM=$(sha256sum "$ZIP_FILE" | awk '{print $1}')
+
+# Write checksum file alongside the ZIP
+CHECKSUM_FILE="${RELEASES_DIR}/espocrm-xero-v${VERSION}.sha256"
+echo "$CHECKSUM  $(basename "$ZIP_FILE")" > "$CHECKSUM_FILE"
+_green "Checksum file: $CHECKSUM_FILE"
 
 _green "Release package ready!"
 echo ""
