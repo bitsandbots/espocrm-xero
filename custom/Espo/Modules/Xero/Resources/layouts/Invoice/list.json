@@ -1,0 +1,10 @@
+[
+    {"name": "name", "link": true},
+    {"name": "status", "width": 12},
+    {"name": "account", "width": 20},
+    {"name": "amount", "align": "right", "width": 12},
+    {"name": "dueDate", "width": 12},
+    {"name": "xeroInvoiceId", "width": 14, "hidden": true},
+    {"name": "xeroSyncedAt", "width": 14, "hidden": true},
+    {"name": "createdAt", "width": 14, "hidden": true}
+]

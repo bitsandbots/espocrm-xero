@@ -1,0 +1,13 @@
+{
+    "fields": {
+        "clientId": "Client ID",
+        "clientSecret": "Client Secret",
+        "tenantId": "Tenant ID (Organisation)",
+        "connectedAt": "Connected At",
+        "defaultAccountCode": "Default Account Code",
+        "lastSyncError": "Last Sync Error"
+    },
+    "help": {
+        "Xero": "Create an app at https://developer.xero.com to obtain your Client ID and Client Secret. Set the redirect URI to: {siteUrl}?entryPoint=XeroOauthCallback. Required scopes: openid profile email offline_access accounting.contacts accounting.invoices accounting.payments accounting.reports.read. After saving credentials, use Admin → Xero → Connect to authorize."
+    }
+}

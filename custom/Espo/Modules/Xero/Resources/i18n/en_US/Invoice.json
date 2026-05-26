@@ -1,0 +1,24 @@
+{
+    "fields": {
+        "name": "Invoice Name",
+        "status": "Status",
+        "amount": "Amount",
+        "dueDate": "Due Date",
+        "lineItems": "Line Items",
+        "account": "Account",
+        "contact": "Contact",
+        "xeroInvoiceId": "Xero Invoice ID",
+        "xeroSyncedAt": "Xero Synced At",
+        "xeroPaymentId": "Xero Payment ID",
+        "xeroPaymentDate": "Xero Payment Date"
+    },
+    "options": {
+        "status": {
+            "Draft": "Draft",
+            "Sent": "Sent",
+            "Paid": "Paid",
+            "Overdue": "Overdue",
+            "Voided": "Voided"
+        }
+    }
+}

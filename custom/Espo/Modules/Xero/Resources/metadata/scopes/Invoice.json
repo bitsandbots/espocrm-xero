@@ -1,0 +1,9 @@
+{
+    "entity": true,
+    "acl": true,
+    "stream": false,
+    "importable": false,
+    "exportable": true,
+    "massUpdate": true,
+    "audited": false
+}

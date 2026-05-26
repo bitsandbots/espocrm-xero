@@ -1,0 +1,20 @@
+{
+    "sidePanels": {
+        "detail": [
+            {
+                "name": "xero",
+                "label": "Xero",
+                "view": "xero:views/panels/xero-status",
+                "order": 11
+            }
+        ],
+        "detailSmall": [
+            {
+                "name": "xero",
+                "label": "Xero",
+                "view": "xero:views/panels/xero-status",
+                "order": 11
+            }
+        ]
+    }
+}

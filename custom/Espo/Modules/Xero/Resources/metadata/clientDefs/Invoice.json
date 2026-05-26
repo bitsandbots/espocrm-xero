@@ -1,0 +1,6 @@
+{
+    "iconClass": "fas fa-file-invoice-dollar",
+    "recordViews": {
+        "detail": "views/record/detail"
+    }
+}

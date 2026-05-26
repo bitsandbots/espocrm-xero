@@ -1,0 +1,102 @@
+{
+    "fields": {
+        "name": {
+            "type": "varchar",
+            "required": true,
+            "maxLength": 255
+        },
+        "status": {
+            "type": "enum",
+            "default": "Draft",
+            "options": ["Draft", "Sent", "Paid", "Overdue", "Voided"],
+            "style": {
+                "Paid": "success",
+                "Voided": "danger",
+                "Overdue": "warning"
+            }
+        },
+        "amount": {
+            "type": "currency",
+            "required": true
+        },
+        "dueDate": {
+            "type": "date"
+        },
+        "lineItems": {
+            "type": "jsonArray"
+        },
+        "account": {
+            "type": "link",
+            "entity": "Account"
+        },
+        "contact": {
+            "type": "link",
+            "entity": "Contact"
+        },
+        "xeroInvoiceId": {
+            "type": "varchar",
+            "maxLength": 64,
+            "readOnly": true
+        },
+        "xeroSyncedAt": {
+            "type": "datetime",
+            "readOnly": true
+        },
+        "xeroPaymentId": {
+            "type": "varchar",
+            "maxLength": 64,
+            "readOnly": true
+        },
+        "xeroPaymentDate": {
+            "type": "date",
+            "readOnly": true
+        },
+        "createdAt": {
+            "type": "datetime",
+            "notStorable": false
+        },
+        "modifiedAt": {
+            "type": "datetime",
+            "notStorable": false
+        },
+        "createdBy": {
+            "type": "link",
+            "entity": "User",
+            "notStorable": false
+        },
+        "modifiedBy": {
+            "type": "link",
+            "entity": "User",
+            "notStorable": false
+        }
+    },
+    "links": {
+        "account": {
+            "type": "belongsTo",
+            "entity": "Account",
+            "foreign": "invoices"
+        },
+        "contact": {
+            "type": "belongsTo",
+            "entity": "Contact",
+            "foreign": "invoices"
+        },
+        "createdBy": {
+            "type": "belongsTo",
+            "entity": "User"
+        },
+        "modifiedBy": {
+            "type": "belongsTo",
+            "entity": "User"
+        }
+    },
+    "collection": {
+        "sortBy": "createdAt",
+        "asc": false
+    },
+    "indexes": {
+        "xeroInvoiceId": {
+            "columns": ["xeroInvoiceId"]
+        }
+    }
+}

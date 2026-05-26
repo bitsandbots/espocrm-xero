@@ -1,0 +1,18 @@
+[
+    {
+        "route": "/XeroIntegration/initOAuth",
+        "method": "post",
+        "params": {
+            "controller": "XeroIntegration",
+            "action": "initOAuth"
+        }
+    },
+    {
+        "route": "/XeroIntegration/runSync",
+        "method": "post",
+        "params": {
+            "controller": "XeroIntegration",
+            "action": "runSync"
+        }
+    }
+]

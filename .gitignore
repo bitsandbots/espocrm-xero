@@ -1,0 +1,4 @@
+releases/
+.release-staging-*/
+/tmp/phpunit-xero-output.log
+.phpunit.result.cache

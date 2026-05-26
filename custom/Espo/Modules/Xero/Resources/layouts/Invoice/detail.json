@@ -1,0 +1,23 @@
+[
+    {
+        "label": "Overview",
+        "rows": [
+            [{"name": "name"}, {"name": "status"}],
+            [{"name": "account"}, {"name": "contact"}],
+            [{"name": "amount"}, {"name": "dueDate"}]
+        ]
+    },
+    {
+        "label": "Line Items",
+        "rows": [
+            [{"name": "lineItems", "fullWidth": true}]
+        ]
+    },
+    {
+        "label": "Xero",
+        "rows": [
+            [{"name": "xeroInvoiceId"}, {"name": "xeroSyncedAt"}],
+            [{"name": "xeroPaymentId"}, {"name": "xeroPaymentDate"}]
+        ]
+    }
+]

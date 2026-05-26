@@ -1,0 +1,20 @@
+{
+    "fields": {
+        "xeroContactId": {
+            "type": "varchar",
+            "maxLength": 64,
+            "readOnly": true
+        },
+        "xeroSyncedAt": {
+            "type": "datetime",
+            "readOnly": true
+        }
+    },
+    "links": {
+        "invoices": {
+            "type": "hasMany",
+            "entity": "Invoice",
+            "foreign": "account"
+        }
+    }
+}

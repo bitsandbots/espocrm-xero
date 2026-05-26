@@ -1,0 +1,10 @@
+{
+    "SyncFromXero": {
+        "name": "Xero: Sync from Xero",
+        "jobClassName": "Espo\\Modules\\Xero\\Jobs\\SyncFromXero"
+    },
+    "ReconcileXero": {
+        "name": "Xero: Reconcile",
+        "jobClassName": "Espo\\Modules\\Xero\\Jobs\\ReconcileXero"
+    }
+}
