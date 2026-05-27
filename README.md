@@ -16,23 +16,16 @@ Bidirectional sync between EspoCRM and Xero.
 
 ## Installation
 
-**From a release ZIP:**
-
 ```bash
-# Extract the ZIP in your EspoCRM root
-cd /path/to/espocrm
-unzip espocrm-xero-v*.zip
+git clone https://github.com/bitsandbots/espocrm-xero.git
+ESPO=/path/to/espocrm
 
-# Run the installer
-bash scripts/install.sh --espo-path /path/to/espocrm
-```
-
-**From source:**
-
-```bash
-git clone https://github.com/coreconduit/espocrm-xero.git
-cd espocrm-xero
-scripts/install.sh --espo-path /path/to/espocrm
+cp -r espocrm-xero/custom/Espo/Modules/Xero  "$ESPO/custom/Espo/Modules/"
+cp -r espocrm-xero/client/custom/modules/xero "$ESPO/client/custom/modules/"
+sudo chown -R www-data:www-data \
+    "$ESPO/custom/Espo/Modules/Xero" \
+    "$ESPO/client/custom/modules/xero"
+php "$ESPO/command.php" rebuild
 ```
 
 ## Configuration

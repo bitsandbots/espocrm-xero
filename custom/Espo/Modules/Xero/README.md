@@ -40,11 +40,12 @@ openid
 profile
 email
 offline_access
+accounting.transactions
 accounting.contacts
-accounting.invoices
-accounting.payments
-accounting.reports.read
 ```
+
+> `accounting.transactions` covers invoices, payments, credit notes, and bank transactions.
+> `accounting.invoices` and `accounting.payments` are **not** valid Xero OAuth scope names.
 
 ### 2. Find your default account code
 
@@ -56,7 +57,7 @@ Xero requires every invoice line item to reference a chart-of-accounts code. Loo
 ### 3. Activate the module
 
 ```bash
-php console.php rebuild
+php command.php rebuild
 ```
 
 This registers the Invoice entity, adds Xero fields to Account and Contact, and loads module metadata.
@@ -150,13 +151,19 @@ If `lineItems` is empty or null, a single line item is created using the Invoice
 
 ## OAuth security
 
-The authorization flow is protected by a server-issued state token:
+The authorization flow uses OAuth 2.0 + PKCE (S256) with a server-issued state token:
 
-1. Clicking **Connect** calls `POST /api/v1/XeroIntegration/initOAuth` (admin only), which generates a cryptographically random 32-character hex token, stores it in the Integration record, and returns it.
-2. The frontend embeds that token in the Xero authorization URL as `state=…`.
-3. Xero redirects back to `?entryPoint=XeroOauthCallback` with the same `state`.
-4. The callback rejects the request if `state` is absent, does not match the stored token, or the Integration has no stored token at all.
-5. On success, the callback fetches the list of authorized organizations from `GET /connections`, stores the first `tenantId`, and clears the stored state token.
+1. Clicking **Connect** calls `POST /api/v1/XeroIntegration/initOAuth` (admin only), which
+   generates a cryptographically random state token and a PKCE code verifier, stores both in
+   the Integration record, and returns the full authorization URL.
+2. The frontend opens the URL in a popup; it includes `state=…`, `code_challenge=…`
+   (SHA-256 hash of the verifier, base64url-encoded), and `code_challenge_method=S256`.
+3. Xero redirects back to `?entryPoint=XeroOauthCallback` with the authorization code and state.
+4. The callback rejects the request if `state` is absent or does not match the stored token.
+5. The code is exchanged for tokens at Xero's token endpoint, including the `code_verifier`
+   to complete PKCE verification.
+6. On success, the callback fetches the list of authorized organisations from `GET /connections`,
+   stores the first `tenantId`, and clears the stored state token and code verifier.
 
 Xero access tokens expire after 30 minutes and are refreshed automatically using the stored refresh token. Refresh tokens expire after 60 days of inactivity — reconnect via Admin → Integrations → Xero if refresh fails.
 
@@ -206,9 +213,9 @@ custom/Espo/Modules/Xero/
 ├── EntryPoints/
 │   └── XeroOauthCallback.php        ?entryPoint=XeroOauthCallback
 ├── Hooks/
-│   ├── Account/Sync.php             afterSave → upsertContact
-│   ├── Contact/Sync.php             afterSave → upsertContact
-│   └── Invoice/Sync.php             afterSave → upsertInvoice or voidInvoice
+│   ├── Account/XeroSync.php         afterSave → upsertContact
+│   ├── Contact/XeroSync.php         afterSave → upsertContact
+│   └── Invoice/XeroSync.php         afterSave → upsertInvoice or voidInvoice
 ├── Jobs/
 │   ├── SyncFromXero.php             nightly pull (contacts + payments)
 │   └── ReconcileXero.php            nightly push (batch 25)
