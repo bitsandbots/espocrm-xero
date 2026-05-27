@@ -211,6 +211,7 @@ Tokens are stored in the `Integration` entity (`id = 'Xero'`) via the flexible `
 | `lastSyncAt` | datetime | Pull job watermark |
 | `defaultAccountCode` | varchar(32) | Account code for invoice line items |
 | `oauthState` | varchar(64) | CSRF token; cleared after OAuth completes |
+| `oauthCodeVerifier` | varchar(128) | PKCE code verifier; cleared after token exchange |
 | `lastSyncError` | text | Last reconcile error; shown in admin UI |
 
 ## OAuth Flow
@@ -218,17 +219,22 @@ Tokens are stored in the `Integration` entity (`id = 'Xero'`) via the flexible `
 ```
 1. Admin clicks "Connect to Xero"
 2. POST /api/v1/XeroIntegration/initOAuth
-   → state = bin2hex(random_bytes(16))
-   → stored in Integration.oauthState
-   → returned to frontend
-3. Frontend builds Xero authorization URL with state param
-4. Frontend opens popup to authorization URL
-5. User approves scopes
-6. Xero redirects to ?entryPoint=XeroOauthCallback
-7. EntryPoint validates state → exchanges code for tokens
-   → fetches tenantId from /connections
-   → clears oauthState
-8. Popup posts success message; admin UI refreshes
+   → state        = bin2hex(random_bytes(16))         — CSRF token
+   → codeVerifier = base64url(random_bytes(32))       — PKCE verifier
+   → codeChallenge = base64url(sha256(codeVerifier))  — PKCE S256 challenge
+   → stored in Integration.oauthState + Integration.oauthCodeVerifier
+   → full authorization URL built server-side and returned to frontend
+3. Frontend type-checks authUrl (must be a string) then opens popup
+4. Popup URL includes: state, code_challenge, code_challenge_method=S256
+5. User approves scopes in Xero
+6. Xero redirects to ?entryPoint=XeroOauthCallback&code=...&state=...
+7. EntryPoint validates state === Integration.oauthState
+   → POST to identity.xero.com/connect/token with code + code_verifier
+   → fetches tenantId from GET /connections
+   → stores accessToken, refreshToken, tenantId, connectedAt
+   → clears oauthState + oauthCodeVerifier
+8. Popup posts {name:'xeroOAuth', status:'success'} to opener
+9. Admin UI refreshes; shows "Connected" with tenantId
 ```
 
 ## Token Refresh
