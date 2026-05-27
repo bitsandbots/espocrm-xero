@@ -1,41 +1,53 @@
 # Gap Analysis — EspoCRM Xero Integration
 
-This document tracks known gaps and limitations in the EspoCRM Xero Integration as of 2026-05-26.
+This document tracks known gaps and limitations in the EspoCRM Xero Integration as of 2026-05-27.
 Previously resolved gaps are listed at the bottom; currently open gaps are organized by severity.
 
 ## Previously Fixed Gaps
 
-The following critical and high-priority gaps have been **resolved** in v1.0:
+The following gaps have been **resolved** in v1.0 and v1.0.1:
 
-| # | Gap | Resolution | Status |
-|---|-----|-----------|--------|
-| 1 | Connect button missing in admin UI | Custom JS view `client/custom/modules/xero/src/views/admin/integrations/xero.js` with OAuth popup | RESOLVED |
-| 2 | `siteUrl` bug in OAuth callback | `XeroOauthCallback.php` injects `Config` and calls `$this->config->get('siteUrl')` | RESOLVED |
-| 3 | `lastSyncAt` field not declared | Added to `Resources/metadata/integrations/Xero.json` | RESOLVED |
-| 4 | Scheduled jobs not registered | `Resources/metadata/app/scheduledJobs.json` created | RESOLVED |
-| 5 | `xeroPaymentId` / `xeroPaymentDate` fields missing | Declared in `entityDefs/Invoice.json` | RESOLVED |
-| 6 | Invoice reverse links missing | `invoices` hasMany link added to `entityDefs/Account.json` | RESOLVED |
-| 7 | OAuth state generation missing | `postActionInitOAuth()` implemented in `XeroIntegration.php` | RESOLVED |
-| 8 | Invoice CRUD controller missing | `Invoice` controller extending `Espo\Core\Controllers\Record` created | RESOLVED |
+| # | Gap | Resolution | Version |
+|---|-----|-----------|---------|
+| 1 | Connect button missing in admin UI | Custom JS view with OAuth popup | v1.0 |
+| 2 | `siteUrl` bug in OAuth callback | `XeroOauthCallback.php` injects `Config` | v1.0 |
+| 3 | `lastSyncAt` field not declared | Added to `integrations/Xero.json` | v1.0 |
+| 4 | Scheduled jobs not registered | `scheduledJobs.json` created | v1.0 |
+| 5 | `xeroPaymentId` / `xeroPaymentDate` fields missing | Declared in `entityDefs/Invoice.json` | v1.0 |
+| 6 | Invoice reverse links missing | `invoices` hasMany link added to `entityDefs/Account.json` | v1.0 |
+| 7 | OAuth state generation missing | `postActionInitOAuth()` generates random hex state | v1.0 |
+| 8 | Invoice CRUD controller missing | `Invoice` controller extending `Record` created | v1.0 |
+| 9 | Wrong Xero OAuth scopes | Replaced `accounting.invoices`/`accounting.payments` (invalid) with `accounting.transactions`; added `openid profile email` | v1.0.1 |
+| 10 | `oauthCodeVerifier` not persisted | Field declared in `integrations/Xero.json`; without it PKCE token exchange always failed (null verifier) | v1.0.1 |
+| 11 | `state=undefined` in authUrl guard | Added type guard in JS: if `data.authUrl` is not a string, show explicit error instead of opening a broken popup | v1.0.1 |
 
 ## Currently Open Gaps
 
 ### High Severity
 
-#### 2. No Disconnect/Reconnect Endpoint
+#### 2. No Token-Clear (Disconnect) Endpoint
 
 **Severity:** High  
-**Impact:** Once connected to Xero, there is no admin UI button to clear tokens and reconnect to a different organisation.
+**Impact:** There is no way to clear OAuth tokens without immediately re-authorizing. To switch
+to a different Xero organisation the admin must click **Reconnect to Xero** (which re-runs the
+full OAuth flow) or manually clear tokens from the database.
 
 **Current Behavior:**
-- OAuth tokens stored in Integration entity
-- No DELETE endpoint to clear them
-- Admin must manually edit the database to reconnect
+- The **Reconnect to Xero** button re-runs the full OAuth popup flow and replaces the stored
+  tenant, tokens, and `connectedAt` — this covers the reconnect use case.
+- There is no separate **Disconnect** button that simply clears tokens and marks the integration
+  as disconnected without immediately starting a new OAuth session.
+- Admins who want to disconnect without reconnecting must edit the database directly.
 
-**Workaround:** Via CLI:
-```bash
-php command.php config:set --name=integration_data_Xero \
-  --value='{"clientId":"...","clientSecret":"..."}'
+**Workaround:** Run in MySQL:
+```sql
+UPDATE integration
+SET data = JSON_SET(data,
+  '$.accessToken', NULL,
+  '$.refreshToken', NULL,
+  '$.tenantId', NULL,
+  '$.connectedAt', NULL)
+WHERE id = 'Xero';
 ```
 
 **Fix Approach:**
@@ -54,7 +66,8 @@ public function deleteActionConnection(Request $request): stdClass
 }
 ```
 
-Add a Disconnect button in the admin integration view calling `DELETE /api/v1/XeroIntegration/connection`.
+Add a **Disconnect** button in the admin integration view (visible only when connected) calling
+`DELETE /api/v1/XeroIntegration/connection`.
 
 **Effort:** Small (~30 minutes)
 
@@ -251,17 +264,17 @@ Add `GET /api/v1/XeroIntegration/ping` that:
 
 | # | Gap | Severity | Status | Effort | Priority |
 |---|-----|----------|--------|--------|----------|
-| 2 | Disconnect endpoint | High | Open | Small | High |
+| 2 | Disconnect (token-clear) endpoint | High | Open | Small | High |
 | 4 | Multi-tenant Xero | Medium | Open | Large | Low |
-| 5 | Xero HTTPS warning in UI | Medium | Open | Small | Medium |
+| 5 | HTTPS warning in UI | Medium | Open | Small | Medium |
 | 6 | Sync audit trail | Medium | Open | Medium | Medium |
-| 8 | Xero webhook support | Low | Open | Large | Low |
-| 9 | Health check endpoint | Low | Open | Small | Low |
+| 7 | Xero webhook support | Low | Open | Large | Low |
+| 8 | Health check endpoint | Low | Open | Small | Low |
 | 10 | Tax handling | Low | Open | Medium | Low |
 | 11 | PDF attachment sync | Low | Open | Medium | Low |
 | 12 | Opportunity → Invoice | Low | Open | Medium | Low |
-| 1 | Invoice CRUD controller | Critical | **Resolved** | — | — |
-| 3 | Xero hooks dedup | High | **Resolved** | — | — |
+| 1–8 | v1.0 gaps (connect btn, siteUrl, fields, jobs, etc.) | — | **Resolved v1.0** | — | — |
+| 9–11 | Wrong scopes, PKCE field, authUrl guard | — | **Resolved v1.0.1** | — | — |
 
 ## Recommended Priority Order
 
@@ -275,13 +288,24 @@ For a production v1.1 rollout, address in this order:
 
 ## Resolved Gaps
 
-The following gaps are now closed in v1.0:
+### v1.0
 
 - Invoice CRUD controller — `Invoice` controller extending `Record` created
 - Connect button — custom admin view with OAuth popup
-- OAuth state generation — `initOAuth` endpoint implemented
+- OAuth state generation — `initOAuth` endpoint generates cryptographic random state
 - `siteUrl` injection — `Config` dependency injected in callback
 - Scheduled job registration — `scheduledJobs.json` created
 - Invoice reverse links — `invoices` hasMany link on Account
 - `xeroPaymentId` / `xeroPaymentDate` fields — declared in entityDefs
 - Xero hook naming collision — hooks named `XeroSync` (not `Sync`)
+
+### v1.0.1
+
+- **Wrong Xero OAuth scopes** — `accounting.invoices` and `accounting.payments` are not valid
+  Xero scope names; replaced with `accounting.transactions`; added `openid profile email`
+- **`oauthCodeVerifier` not persisted** — field was being set in PHP but not declared in
+  `integrations/Xero.json`, so EspoCRM's ORM silently dropped it on save; PKCE token exchange
+  always returned a 400 (null verifier sent to Xero)
+- **`state=undefined` guard** — added type check in `actionConnectXero()` so a missing or
+  non-string `authUrl` from the server shows an explicit error instead of opening a popup
+  pointed at the literal string `"undefined"`
