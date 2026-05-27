@@ -84,7 +84,14 @@ export default class XeroIntegrationView extends IntegrationsEditView {
         }
 
         Espo.Ajax.postRequest('XeroIntegration/initOAuth', {})
-            .then(data => this.openOAuthPopup(data.authUrl))
+            .then(data => {
+                if (!data || typeof data.authUrl !== 'string') {
+                    Espo.Ui.error('Xero OAuth: server returned no authorization URL. Check server logs.');
+                    return;
+                }
+
+                this.openOAuthPopup(data.authUrl);
+            })
             .catch(() => Espo.Ui.error('Could not initiate Xero OAuth. Check server logs.'));
     }
 

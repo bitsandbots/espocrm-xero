@@ -74,7 +74,13 @@ define("modules/xero/views/admin/integrations/xero", ["exports", "views/admin/in
         Espo.Ui.warning('Save your Client ID and Client Secret first.');
         return;
       }
-      Espo.Ajax.postRequest('XeroIntegration/initOAuth', {}).then(data => this.openOAuthPopup(data.authUrl)).catch(() => Espo.Ui.error('Could not initiate Xero OAuth. Check server logs.'));
+      Espo.Ajax.postRequest('XeroIntegration/initOAuth', {}).then(data => {
+        if (!data || typeof data.authUrl !== 'string') {
+          Espo.Ui.error('Xero OAuth: server returned no authorization URL. Check server logs.');
+          return;
+        }
+        this.openOAuthPopup(data.authUrl);
+      }).catch(() => Espo.Ui.error('Could not initiate Xero OAuth. Check server logs.'));
     }
     openOAuthPopup(authUrl) {
       const popup = window.open(authUrl, 'xero-oauth', 'width=650,height=720,left=200,top=100');

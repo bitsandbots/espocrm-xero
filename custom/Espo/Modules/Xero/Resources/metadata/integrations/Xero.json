@@ -32,6 +32,11 @@
             "maxLength": 64,
             "notStorable": false
         },
+        "oauthCodeVerifier": {
+            "type": "varchar",
+            "maxLength": 128,
+            "notStorable": false
+        },
         "lastSyncError": {
             "type": "text",
             "readOnly": true

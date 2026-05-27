@@ -18,7 +18,7 @@ use stdClass;
 class XeroIntegration
 {
     private const AUTHORIZE_ENDPOINT = 'https://login.xero.com/identity/connect/authorize';
-    private const SCOPES = 'offline_access accounting.contacts accounting.invoices accounting.payments';
+    private const SCOPES = 'openid profile email offline_access accounting.transactions accounting.contacts';
 
     public function __construct(
         private EntityManager $entityManager,
