@@ -499,6 +499,25 @@ class XeroService
         }
     }
 
+    // -------------------------------------------------------------------------
+    // Health check
+    // -------------------------------------------------------------------------
+
+    /**
+     * Calls GET /Organisation to verify the stored credentials are still valid.
+     * Triggers a token refresh if the access token is expiring soon.
+     *
+     * @return array{ok: true, organisation: string}
+     * @throws Error
+     */
+    public function ping(): array
+    {
+        $result = $this->request('GET', $this->apiUrl('Organisation'));
+        $name = $result['Organisations'][0]['Name'] ?? 'Unknown';
+
+        return ['ok' => true, 'organisation' => $name];
+    }
+
     /**
      * Pull Xero Contacts updated since $sinceDate and sync to EspoCRM Accounts.
      *

@@ -9,6 +9,7 @@ use Espo\Core\Utils\Config;
 use Espo\Entities\Integration;
 use Espo\Entities\User;
 use Espo\Modules\Xero\Controllers\XeroIntegration;
+use Espo\Modules\Xero\Services\XeroService;
 use Espo\ORM\EntityManager;
 use PHPUnit\Framework\TestCase;
 
@@ -18,6 +19,7 @@ class XeroIntegrationControllerTest extends TestCase
     private InjectableFactory $factory;
     private Config $config;
     private User $user;
+    private XeroService $xeroService;
     private Request $request;
 
     protected function setUp(): void
@@ -26,6 +28,7 @@ class XeroIntegrationControllerTest extends TestCase
         $this->factory = $this->createMock(InjectableFactory::class);
         $this->config = $this->createMock(Config::class);
         $this->user = $this->createMock(User::class);
+        $this->xeroService = $this->createMock(XeroService::class);
         $this->request = $this->createMock(Request::class);
 
         $this->config->method('get')->with('siteUrl')->willReturn('https://cake.local:8443');
@@ -33,7 +36,7 @@ class XeroIntegrationControllerTest extends TestCase
 
     private function makeController(): XeroIntegration
     {
-        return new XeroIntegration($this->em, $this->factory, $this->config, $this->user);
+        return new XeroIntegration($this->em, $this->factory, $this->config, $this->user, $this->xeroService);
     }
 
     private function makeIntegrationMock(string $clientId = 'TEST_CLIENT_ID'): Integration
@@ -178,5 +181,48 @@ class XeroIntegrationControllerTest extends TestCase
         $this->expectException(\Espo\Core\Exceptions\Error::class);
 
         $this->makeController()->deleteActionConnection($this->request);
+    }
+
+    public function testPingReturnsOkTrueWithOrganisationName(): void
+    {
+        $this->user->method('isAdmin')->willReturn(true);
+
+        $this->xeroService
+            ->method('ping')
+            ->willReturn(['ok' => true, 'organisation' => 'Acme Ltd']);
+
+        $result = $this->makeController()->getActionPing($this->request);
+
+        $this->assertTrue($result->ok);
+        $this->assertSame('Acme Ltd', $result->organisation);
+    }
+
+    public function testPingReturnsOkFalseOnServiceException(): void
+    {
+        $this->user->method('isAdmin')->willReturn(true);
+
+        $this->xeroService
+            ->method('ping')
+            ->willThrowException(new \Espo\Core\Exceptions\Error('Token expired'));
+
+        $result = $this->makeController()->getActionPing($this->request);
+
+        $this->assertFalse($result->ok);
+        $this->assertSame('Token expired', $result->error);
+    }
+
+    public function testPingNeverThrows(): void
+    {
+        $this->user->method('isAdmin')->willReturn(true);
+
+        $this->xeroService
+            ->method('ping')
+            ->willThrowException(new \RuntimeException('Network failure'));
+
+        // Must not propagate
+        $result = $this->makeController()->getActionPing($this->request);
+
+        $this->assertFalse($result->ok);
+        $this->assertStringContainsString('Network failure', $result->error);
     }
 }

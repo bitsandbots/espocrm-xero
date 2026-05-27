@@ -11,9 +11,11 @@ use Espo\Entities\Integration;
 use Espo\Entities\User;
 use Espo\Modules\Xero\Jobs\ReconcileXero;
 use Espo\Modules\Xero\Jobs\SyncFromXero;
+use Espo\Modules\Xero\Services\XeroService;
 use Espo\ORM\EntityManager;
 
 use stdClass;
+use Throwable;
 
 class XeroIntegration
 {
@@ -25,6 +27,7 @@ class XeroIntegration
         private InjectableFactory $injectableFactory,
         private Config $config,
         private User $user,
+        private XeroService $xeroService,
     ) {
         if (!$this->user->isAdmin()) {
             throw new Forbidden();
@@ -78,6 +81,29 @@ class XeroIntegration
 
         $result = new stdClass();
         $result->authUrl = $authUrl;
+
+        return $result;
+    }
+
+    /**
+     * Verifies the stored Xero credentials by calling GET /Organisation.
+     * Triggers a token refresh if the access token is expiring soon.
+     * Always returns HTTP 200; check `ok` in the response body.
+     *
+     * Response: {ok: true, organisation: string} | {ok: false, error: string}
+     */
+    public function getActionPing(Request $request): stdClass
+    {
+        $result = new stdClass();
+
+        try {
+            $ping = $this->xeroService->ping();
+            $result->ok = true;
+            $result->organisation = $ping['organisation'];
+        } catch (Throwable $e) {
+            $result->ok = false;
+            $result->error = $e->getMessage();
+        }
 
         return $result;
     }

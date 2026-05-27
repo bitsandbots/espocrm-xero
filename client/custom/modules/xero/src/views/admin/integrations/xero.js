@@ -17,6 +17,10 @@ export default class XeroIntegrationView extends IntegrationsEditView {
             this.actionDisconnectXero();
         },
         /** @this XeroIntegrationView */
+        'click [data-action="pingXero"]': function () {
+            this.actionPingXero();
+        },
+        /** @this XeroIntegrationView */
         'click [data-action="runSync"]': function () {
             this.actionRunSync();
         },
@@ -69,6 +73,9 @@ export default class XeroIntegrationView extends IntegrationsEditView {
                     </button>
                     ${isConnected ? `<button class="btn btn-default btn-sm" data-action="runSync">
                         Sync Now
+                    </button>
+                    <button class="btn btn-default btn-sm" data-action="pingXero">
+                        Check Connection
                     </button>
                     <button class="btn btn-danger btn-sm" data-action="disconnectXero">
                         Disconnect
@@ -134,6 +141,23 @@ export default class XeroIntegrationView extends IntegrationsEditView {
                 window.removeEventListener('message', onMessage);
             }
         }, 800);
+    }
+
+    actionPingXero() {
+        const $btn = this.$el.find('[data-action="pingXero"]');
+        $btn.prop('disabled', true).text('Checking…');
+
+        Espo.Ajax.getRequest('XeroIntegration/ping')
+            .then(data => {
+                if (data && data.ok) {
+                    Espo.Ui.success(`Connected · ${data.organisation}`);
+                } else {
+                    const msg = (data && data.error) ? data.error : 'Unknown error';
+                    Espo.Ui.error(`Connection failed: ${msg}`);
+                }
+            })
+            .catch(() => Espo.Ui.error('Ping request failed. Check server logs.'))
+            .finally(() => $btn.prop('disabled', false).text('Check Connection'));
     }
 
     actionDisconnectXero() {

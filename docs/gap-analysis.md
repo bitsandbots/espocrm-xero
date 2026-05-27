@@ -1,7 +1,7 @@
 # Gap Analysis — EspoCRM Xero Integration
 
 This document tracks known gaps and limitations in the EspoCRM Xero Integration as of 2026-05-27.
-Gap #2 (Disconnect endpoint) was resolved in v1.1.
+Gap #2 (Disconnect endpoint) was resolved in v1.1. Gap #8 (Health check endpoint) was resolved in v1.1.
 Previously resolved gaps are listed at the bottom; currently open gaps are organized by severity.
 
 ## Previously Fixed Gaps
@@ -123,28 +123,6 @@ Xero webhooks require endpoint registration and HMAC-SHA256 signature verificati
 
 ---
 
-#### 8. No Health Check Endpoint
-
-**Severity:** Low  
-**Impact:** Admins cannot verify the Xero connection without checking logs or running a manual sync job.
-
-**Current Behavior:**
-- Connection status only visible after OAuth completes (`connectedAt` field)
-- No ping to test if the connection is still live
-- If refresh token expires, admin discovers this by seeing sync failures
-
-**Fix Approach:**
-Add `GET /api/v1/XeroIntegration/ping` that:
-1. Calls Xero's `/Organisation` endpoint with the stored access token
-2. Returns `{ok: true}` or `{ok: false, error: "..."}` with HTTP 200/502
-3. Triggers token refresh if needed before calling
-
-**Effort:** Small (~30 minutes)
-
-**Priority:** Low (nice-to-have for observability)
-
----
-
 #### 10. No Tax Handling
 
 **Severity:** Low  
@@ -219,7 +197,7 @@ Add `GET /api/v1/XeroIntegration/ping` that:
 | 5 | HTTPS warning in UI | Medium | Open | Small | Medium |
 | 6 | Sync audit trail | Medium | Open | Medium | Medium |
 | 7 | Xero webhook support | Low | Open | Large | Low |
-| 8 | Health check endpoint | Low | Open | Small | Low |
+| 8 | Health check endpoint | — | **Resolved v1.1** | — | — |
 | 10 | Tax handling | Low | Open | Medium | Low |
 | 11 | PDF attachment sync | Low | Open | Medium | Low |
 | 12 | Opportunity → Invoice | Low | Open | Medium | Low |
@@ -234,7 +212,7 @@ For a production v1.1 rollout, address in this order:
 1. ~~**High**: Disconnect endpoint~~ — **Done in v1.1**
 2. **Medium**: Sync audit trail — improves observability for larger deployments
 3. **Medium**: HTTPS UI warning — reduces user confusion during setup
-4. **Low**: Health check ping — nice-to-have for monitoring
+4. ~~**Low**: Health check ping~~ — **Done in v1.1**
 5. **Everything else**: Defer to v2
 
 ## Resolved Gaps
@@ -266,3 +244,7 @@ For a production v1.1 rollout, address in this order:
 - **Disconnect endpoint** — `DELETE /api/v1/XeroIntegration/connection` clears `accessToken`,
   `refreshToken`, `tenantId`, and `connectedAt`; a **Disconnect** button (danger-styled, visible
   only when connected) appears in the admin integration view alongside a confirmation dialog
+- **Health check endpoint** — `GET /api/v1/XeroIntegration/ping` calls `GET /Organisation`,
+  triggers a token refresh if needed, and returns `{ok: true, organisation: "…"}` or
+  `{ok: false, error: "…"}`; a **Check Connection** button in the admin view shows the result
+  as a success/error toast; never throws — HTTP 200 always

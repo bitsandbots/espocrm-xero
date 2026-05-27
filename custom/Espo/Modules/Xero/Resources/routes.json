@@ -22,5 +22,13 @@
             "controller": "XeroIntegration",
             "action": "connection"
         }
+    },
+    {
+        "route": "/XeroIntegration/ping",
+        "method": "get",
+        "params": {
+            "controller": "XeroIntegration",
+            "action": "ping"
+        }
     }
 ]
