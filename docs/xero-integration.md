@@ -44,7 +44,7 @@ Maps an Account or Contact to a Xero Contact and creates or updates it.
 
 - If `$entity->get('xeroContactId')` is null → POST (create new contact)
 - If set → POST with `ContactID` (Xero uses POST for all contact operations)
-- Writes `xeroContactId`, `xeroContactStatus`, `xeroSyncedAt` back to entity
+- Writes `xeroContactId`, `xeroSyncedAt` back to entity
 - Saves with `skipXeroSync=true` to prevent hook re-entry
 
 **Field mapping:**
@@ -55,8 +55,8 @@ Maps an Account or Contact to a Xero Contact and creates or updates it.
 | `firstName` + `lastName` (Contact) | `FirstName`, `LastName` |
 | `emailAddress` | `EmailAddress` |
 | `phoneNumber` | `Phones` (PhoneType: "DEFAULT") |
-| `website` | Stored in `ContactName` for reference |
-| `billingAddress*` | `Addresses` (AddressType: "POBOX") |
+| `website` | `Website` |
+| `billingAddress*` | `Addresses` (AddressType: `STREET`) |
 
 **Example:**
 ```php
@@ -80,20 +80,23 @@ Maps an EspoCRM Invoice to a Xero Invoice. Requires the linked Account to have a
 
 - Resolves `ContactID` from Account's `xeroContactId`
 - Maps EspoCRM `lineItems` JSON array → Xero `LineItems[]`
-- Each line item includes `Description`, `Quantity`, `UnitAmount`, and `AccountCode` (from integration's `defaultAccountCode` or `200`)
-- Writes `xeroInvoiceId`, `xeroInvoiceStatus`, `xeroSyncedAt` back to entity
+- Each line item includes `Description`, `Quantity`, `UnitAmount`, and `AccountCode` (from integration's `defaultAccountCode` or line item's `xeroAccountCode`)
+- Writes `xeroInvoiceId`, `xeroSyncedAt` back to entity
 
 **Field mapping:**
 
 | EspoCRM | Xero Invoice |
 |---------|-------------|
-| `number` | `InvoiceNumber` |
-| `amount` | Sum of `LineItems[].LineAmount` |
+| `amount` | `LineItems[0].UnitAmount` (fallback when `lineItems` is empty) |
 | `dueDate` | `DueDate` |
-| `status` | `Status` (one of: DRAFT, SUBMITTED, AUTHORISED, PAID) |
+| `name` | `LineItems[0].Description` (fallback single line item) |
 | `lineItems[].description` | `Description` |
 | `lineItems[].quantity` | `Quantity` |
 | `lineItems[].unitPrice` | `UnitAmount` |
+| `lineItems[].xeroAccountCode` | `AccountCode` (falls back to `defaultAccountCode`) |
+
+> All invoices are pushed with Xero `Status: DRAFT`. Status changes (AUTHORISED, PAID) are
+> managed in Xero directly; PAID status is pulled back nightly via `pullPaymentsSince()`.
 
 **Example:**
 ```php
@@ -126,11 +129,11 @@ Used when an Invoice is marked as Voided in EspoCRM and the sync hook detects th
 
 ### `pullPaymentsSince(string $sinceDate): void`
 
-Queries Xero for all Payments with `UpdatedUTC >= sinceDate`. For each payment:
+Queries Xero for all Payments where `Date >= sinceDate AND Status == "AUTHORISED"`. For each payment:
 
 1. Parses the payment's `Invoice` reference to get Xero invoice ID
 2. Finds EspoCRM Invoice by `xeroInvoiceId`
-3. Sets `status = Paid`, stores `xeroPaymentId`, `xeroPaymentDate`, `xeroPaymentReference`
+3. Sets `status = Paid`, stores `xeroPaymentId`, `xeroPaymentDate`
 4. Saves with `skipXeroSync=true`
 
 **Note:** Xero Payments are immutable once created. EspoCRM cannot edit them; only pull and reflect in Invoice status.
@@ -231,7 +234,8 @@ php command.php run-job --job-class="Espo\Modules\Xero\Jobs\SyncFromXero"
 
 Finds records where `modifiedAt > xeroSyncedAt` (EspoCRM was modified more recently than last sync). Pushes those to Xero.
 
-**Batch size:** 50 records per run (configurable in `Resources/metadata/integrations/Xero.json` via `reconcileBatchSize`).
+**Batch size:** 25 records per run (hardcoded `BATCH_SIZE` constant to stay within Xero's
+60 req/min rate limit).
 
 **Execution:**
 ```bash
@@ -240,7 +244,7 @@ php command.php run-job --job-class="Espo\Modules\Xero\Jobs\ReconcileXero"
 
 **Cron schedule (recommended):**
 ```
-0 3 * * *  (3 AM daily, after SyncFromXero)
+15 2 * * *  (2:15 AM daily, 15 minutes after SyncFromXero)
 ```
 
 ## Conflict Resolution
@@ -278,7 +282,7 @@ All calls go to: `https://api.xero.com/api.xro/2.0/`
 | Query Payments | GET | `Payments` | Supports `where` filter with UpdatedUTC |
 | Get Tenant | GET | `/connections` | Returns list of authorized tenants (called post-OAuth) |
 
-All requests require: `Authorization: Bearer {accessToken}`, `Accept: application/json`, `Xero-tenant-id: {tenantId}`.
+All requests require: `Authorization: Bearer {accessToken}`, `Accept: application/json`, `Xero-Tenant-Id: {tenantId}`.
 
 ## Integration Entity Fields
 
@@ -303,6 +307,7 @@ $tenantId = $integration->get('tenantId');
 | `lastSyncAt` | datetime | Timestamp of last successful pull job |
 | `defaultAccountCode` | varchar(32) | Account code for invoices (e.g., "200"); required by Xero |
 | `oauthState` | varchar(64) | CSRF token generated during initOAuth; validated in callback |
+| `oauthCodeVerifier` | varchar(128) | PKCE code verifier; cleared after token exchange |
 | `lastSyncError` | text | Last error message (for debugging in UI) |
 
 ## Adding a New Entity Sync
@@ -359,7 +364,7 @@ To add sync for a new EspoCRM entity (e.g., Lead → Xero Contact):
 
 5. **Rebuild and test:**
    ```bash
-   php rebuild.php
+   php command.php rebuild
    vendor/bin/phpunit tests/unit/Espo/Modules/Xero/
    ```
 
@@ -400,20 +405,19 @@ However, Xero cannot distinguish between them. If you create an Account and Cont
 
 EspoCRM Invoice statuses map to Xero as follows:
 
-| EspoCRM | Xero | Notes |
-|---------|------|-------|
-| Draft | DRAFT | Not yet submitted to customer |
-| Submitted | SUBMITTED | Sent to customer, awaiting payment |
-| Paid | PAID | Payment received (read-only in pull) |
-| Voided | VOIDED | Cancelled; cannot be un-voided |
+| EspoCRM | Xero | Direction | Notes |
+|---------|------|-----------|-------|
+| Draft / Sent / Overdue | DRAFT | Push | All outbound invoices are pushed as DRAFT regardless of EspoCRM status |
+| Voided | VOIDED | Push | Void is triggered when EspoCRM status = Voided |
+| Paid | PAID | Pull only | Set automatically when Xero Payment is pulled nightly |
 
 When pulling from Xero:
-- If Xero Invoice.Status == PAID → Set EspoCRM Invoice.status = Paid
+- If Xero Invoice.Status == PAID (via a matching Payment record) → Set EspoCRM Invoice.status = Paid
 
 When pushing to Xero:
-- EspoCRM Invoice.status = Draft → Xero Status = DRAFT
-- EspoCRM Invoice.status = Submitted → Xero Status = SUBMITTED
-- Xero does not allow directly setting to PAID; only Payments can mark as paid
+- All non-Voided invoices are pushed with `Status: DRAFT` — Xero AUTHORISED/SUBMITTED states are managed in Xero itself
+- EspoCRM Invoice.status = Voided → void operation (POST with Status: VOIDED)
+- Xero does not allow directly setting to PAID via invoice; only Payments can mark as paid
 
 ## Testing
 
