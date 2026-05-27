@@ -19,6 +19,10 @@ define("modules/xero/views/admin/integrations/xero", ["exports", "views/admin/in
         this.actionConnectXero();
       },
       /** @this XeroIntegrationView */
+      'click [data-action="disconnectXero"]': function () {
+        this.actionDisconnectXero();
+      },
+      /** @this XeroIntegrationView */
       'click [data-action="runSync"]': function () {
         this.actionRunSync();
       }
@@ -59,6 +63,9 @@ define("modules/xero/views/admin/integrations/xero", ["exports", "views/admin/in
                     </button>
                     ${isConnected ? `<button class="btn btn-default btn-sm" data-action="runSync">
                         Sync Now
+                    </button>
+                    <button class="btn btn-danger btn-sm" data-action="disconnectXero">
+                        Disconnect
                     </button>` : ''}
                 </div>
                 <p style="margin-top:10px;margin-bottom:0;font-size:12px;color:#888">
@@ -108,6 +115,20 @@ define("modules/xero/views/admin/integrations/xero", ["exports", "views/admin/in
           window.removeEventListener('message', onMessage);
         }
       }, 800);
+    }
+    actionDisconnectXero() {
+      Espo.Ui.confirm('Disconnect from Xero? Tokens will be cleared. Sync will stop until you reconnect.', {
+        confirmText: 'Disconnect',
+        cancelText: 'Cancel'
+      }, () => {
+        Espo.Ajax.request('XeroIntegration/connection', 'DELETE').then(() => {
+          Espo.Ui.success('Disconnected from Xero.');
+          this.model.fetch().then(() => {
+            this.$el.find('.xero-status-wrap').remove();
+            this.renderStatusSection();
+          });
+        }).catch(() => Espo.Ui.error('Disconnect failed. Check server logs.'));
+      });
     }
     actionRunSync() {
       const $btn = this.$el.find('[data-action="runSync"]');

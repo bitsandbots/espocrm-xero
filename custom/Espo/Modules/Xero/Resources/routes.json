@@ -14,5 +14,13 @@
             "controller": "XeroIntegration",
             "action": "runSync"
         }
+    },
+    {
+        "route": "/XeroIntegration/connection",
+        "method": "delete",
+        "params": {
+            "controller": "XeroIntegration",
+            "action": "connection"
+        }
     }
 ]

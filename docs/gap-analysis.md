@@ -1,6 +1,7 @@
 # Gap Analysis — EspoCRM Xero Integration
 
 This document tracks known gaps and limitations in the EspoCRM Xero Integration as of 2026-05-27.
+Gap #2 (Disconnect endpoint) was resolved in v1.1.
 Previously resolved gaps are listed at the bottom; currently open gaps are organized by severity.
 
 ## Previously Fixed Gaps
@@ -22,56 +23,6 @@ The following gaps have been **resolved** in v1.0 and v1.0.1:
 | 11 | `state=undefined` in authUrl guard | Added type guard in JS: if `data.authUrl` is not a string, show explicit error instead of opening a broken popup | v1.0.1 |
 
 ## Currently Open Gaps
-
-### High Severity
-
-#### 2. No Token-Clear (Disconnect) Endpoint
-
-**Severity:** High  
-**Impact:** There is no way to clear OAuth tokens without immediately re-authorizing. To switch
-to a different Xero organisation the admin must click **Reconnect to Xero** (which re-runs the
-full OAuth flow) or manually clear tokens from the database.
-
-**Current Behavior:**
-- The **Reconnect to Xero** button re-runs the full OAuth popup flow and replaces the stored
-  tenant, tokens, and `connectedAt` — this covers the reconnect use case.
-- There is no separate **Disconnect** button that simply clears tokens and marks the integration
-  as disconnected without immediately starting a new OAuth session.
-- Admins who want to disconnect without reconnecting must edit the database directly.
-
-**Workaround:** Run in MySQL:
-```sql
-UPDATE integration
-SET data = JSON_SET(data,
-  '$.accessToken', NULL,
-  '$.refreshToken', NULL,
-  '$.tenantId', NULL,
-  '$.connectedAt', NULL)
-WHERE id = 'Xero';
-```
-
-**Fix Approach:**
-Add to `XeroIntegration.php`:
-```php
-public function deleteActionConnection(Request $request): stdClass
-{
-    $integration = $this->entityManager->getEntityById(Integration::ENTITY_TYPE, 'Xero');
-    $integration->set('accessToken', null);
-    $integration->set('refreshToken', null);
-    $integration->set('tenantId', null);
-    $integration->set('connectedAt', null);
-    $this->entityManager->saveEntity($integration);
-
-    return new stdClass();
-}
-```
-
-Add a **Disconnect** button in the admin integration view (visible only when connected) calling
-`DELETE /api/v1/XeroIntegration/connection`.
-
-**Effort:** Small (~30 minutes)
-
----
 
 ### Medium Severity
 
@@ -264,7 +215,6 @@ Add `GET /api/v1/XeroIntegration/ping` that:
 
 | # | Gap | Severity | Status | Effort | Priority |
 |---|-----|----------|--------|--------|----------|
-| 2 | Disconnect (token-clear) endpoint | High | Open | Small | High |
 | 4 | Multi-tenant Xero | Medium | Open | Large | Low |
 | 5 | HTTPS warning in UI | Medium | Open | Small | Medium |
 | 6 | Sync audit trail | Medium | Open | Medium | Medium |
@@ -275,12 +225,13 @@ Add `GET /api/v1/XeroIntegration/ping` that:
 | 12 | Opportunity → Invoice | Low | Open | Medium | Low |
 | 1–8 | v1.0 gaps (connect btn, siteUrl, fields, jobs, etc.) | — | **Resolved v1.0** | — | — |
 | 9–11 | Wrong scopes, PKCE field, authUrl guard | — | **Resolved v1.0.1** | — | — |
+| 2 | Disconnect (token-clear) endpoint | — | **Resolved v1.1** | — | — |
 
 ## Recommended Priority Order
 
 For a production v1.1 rollout, address in this order:
 
-1. **High**: Disconnect endpoint — enables reconnecting to a different Xero org
+1. ~~**High**: Disconnect endpoint~~ — **Done in v1.1**
 2. **Medium**: Sync audit trail — improves observability for larger deployments
 3. **Medium**: HTTPS UI warning — reduces user confusion during setup
 4. **Low**: Health check ping — nice-to-have for monitoring
@@ -309,3 +260,9 @@ For a production v1.1 rollout, address in this order:
 - **`state=undefined` guard** — added type check in `actionConnectXero()` so a missing or
   non-string `authUrl` from the server shows an explicit error instead of opening a popup
   pointed at the literal string `"undefined"`
+
+### v1.1
+
+- **Disconnect endpoint** — `DELETE /api/v1/XeroIntegration/connection` clears `accessToken`,
+  `refreshToken`, `tenantId`, and `connectedAt`; a **Disconnect** button (danger-styled, visible
+  only when connected) appears in the admin integration view alongside a confirmation dialog

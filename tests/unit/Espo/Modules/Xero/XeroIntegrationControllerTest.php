@@ -125,4 +125,58 @@ class XeroIntegrationControllerTest extends TestCase
         parse_str(parse_url($result->authUrl, PHP_URL_QUERY), $params);
         $this->assertSame($params['state'], $savedState);
     }
+
+    public function testDisconnectClearsTokenFields(): void
+    {
+        $this->user->method('isAdmin')->willReturn(true);
+
+        $integration = $this->createMock(Integration::class);
+        $clearedFields = [];
+        $integration->method('set')->willReturnCallback(
+            function (string $k, mixed $v) use (&$clearedFields, $integration) {
+                $clearedFields[$k] = $v;
+                return $integration;
+            }
+        );
+
+        $this->em->method('getEntityById')
+            ->with(Integration::ENTITY_TYPE, 'Xero')
+            ->willReturn($integration);
+        $this->em->expects($this->once())->method('saveEntity')->with($integration);
+
+        $this->makeController()->deleteActionConnection($this->request);
+
+        $this->assertNull($clearedFields['accessToken']);
+        $this->assertNull($clearedFields['refreshToken']);
+        $this->assertNull($clearedFields['tenantId']);
+        $this->assertNull($clearedFields['connectedAt']);
+    }
+
+    public function testDisconnectReturnsEmptyObject(): void
+    {
+        $this->user->method('isAdmin')->willReturn(true);
+
+        $integration = $this->createMock(Integration::class);
+        $integration->method('set')->willReturnSelf();
+
+        $this->em->method('getEntityById')->willReturn($integration);
+
+        $result = $this->makeController()->deleteActionConnection($this->request);
+
+        $this->assertInstanceOf(\stdClass::class, $result);
+        $this->assertEmpty((array) $result);
+    }
+
+    public function testDisconnectThrowsIfIntegrationNotFound(): void
+    {
+        $this->user->method('isAdmin')->willReturn(true);
+
+        $this->em->method('getEntityById')
+            ->with(Integration::ENTITY_TYPE, 'Xero')
+            ->willReturn(null);
+
+        $this->expectException(\Espo\Core\Exceptions\Error::class);
+
+        $this->makeController()->deleteActionConnection($this->request);
+    }
 }

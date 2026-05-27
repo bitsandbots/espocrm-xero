@@ -83,6 +83,31 @@ class XeroIntegration
     }
 
     /**
+     * Clears all OAuth tokens from the Integration entity, disconnecting
+     * EspoCRM from Xero without starting a new OAuth session.
+     *
+     * @throws Forbidden
+     * @throws Error
+     */
+    public function deleteActionConnection(Request $request): stdClass
+    {
+        /** @var ?Integration $integration */
+        $integration = $this->entityManager->getEntityById(Integration::ENTITY_TYPE, 'Xero');
+
+        if (!$integration) {
+            throw new Error("Xero integration not found.");
+        }
+
+        $integration->set('accessToken', null);
+        $integration->set('refreshToken', null);
+        $integration->set('tenantId', null);
+        $integration->set('connectedAt', null);
+        $this->entityManager->saveEntity($integration);
+
+        return new stdClass();
+    }
+
+    /**
      * Runs SyncFromXero then ReconcileXero synchronously.
      * Suitable for on-demand use via the admin UI on small datasets.
      *
