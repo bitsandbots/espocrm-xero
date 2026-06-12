@@ -1,0 +1,56 @@
+{
+    "fields": {
+        "direction": {
+            "type": "enum",
+            "options": ["push", "pull"],
+            "required": true
+        },
+        "recordType": {
+            "type": "enum",
+            "options": ["Account", "Contact", "Invoice", ""],
+            "required": false
+        },
+        "recordId": {
+            "type": "varchar",
+            "maxLength": 64,
+            "readOnly": true
+        },
+        "recordName": {
+            "type": "varchar",
+            "maxLength": 255,
+            "readOnly": true
+        },
+        "status": {
+            "type": "enum",
+            "options": ["success", "error"],
+            "required": true,
+            "style": {
+                "success": "success",
+                "error": "danger"
+            }
+        },
+        "message": {
+            "type": "text",
+            "readOnly": true
+        },
+        "createdAt": {
+            "type": "datetime",
+            "notStorable": false
+        }
+    },
+    "collection": {
+        "sortBy": "createdAt",
+        "asc": false
+    },
+    "indexes": {
+        "status": {
+            "columns": ["status"]
+        },
+        "recordType": {
+            "columns": ["recordType"]
+        },
+        "createdAt": {
+            "columns": ["createdAt"]
+        }
+    }
+}

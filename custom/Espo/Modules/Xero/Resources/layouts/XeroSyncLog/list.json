@@ -1,0 +1,8 @@
+[
+    {"name": "createdAt", "width": 18},
+    {"name": "direction", "width": 10},
+    {"name": "recordType", "width": 12},
+    {"name": "recordName", "link": true, "width": 22},
+    {"name": "status", "width": 10},
+    {"name": "message", "width": 28}
+]

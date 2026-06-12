@@ -1,0 +1,8 @@
+{
+    "iconClass": "fas fa-history",
+    "recordViews": {
+        "detail": "views/record/detail"
+    },
+    "massActionList": [],
+    "actionList": []
+}

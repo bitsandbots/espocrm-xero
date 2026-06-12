@@ -1,0 +1,31 @@
+{
+    "labels": {
+        "XeroSyncLog": "Xero Sync Log",
+        "createButton": "Create Log Entry"
+    },
+    "fields": {
+        "direction": "Direction",
+        "recordType": "Record Type",
+        "recordId": "Record ID",
+        "recordName": "Record Name",
+        "status": "Status",
+        "message": "Message",
+        "createdAt": "Date"
+    },
+    "options": {
+        "direction": {
+            "push": "Push (EspoCRM → Xero)",
+            "pull": "Pull (Xero → EspoCRM)"
+        },
+        "recordType": {
+            "Account": "Account",
+            "Contact": "Contact",
+            "Invoice": "Invoice",
+            "": "—"
+        },
+        "status": {
+            "success": "Success",
+            "error": "Error"
+        }
+    }
+}

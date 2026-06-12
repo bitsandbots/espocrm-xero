@@ -1,0 +1,11 @@
+{
+    "entity": true,
+    "module": "Xero",
+    "acl": true,
+    "stream": false,
+    "importable": false,
+    "exportable": true,
+    "massUpdate": false,
+    "audited": false,
+    "object": false
+}

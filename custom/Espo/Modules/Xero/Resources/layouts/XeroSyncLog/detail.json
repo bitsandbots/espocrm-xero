@@ -1,0 +1,10 @@
+[
+    {
+        "rows": [
+            [{"name": "createdAt"}, {"name": "direction"}],
+            [{"name": "recordType"}, {"name": "status"}],
+            [{"name": "recordName"}, {"name": "recordId"}],
+            [{"name": "message", "fullWidth": true}]
+        ]
+    }
+]
