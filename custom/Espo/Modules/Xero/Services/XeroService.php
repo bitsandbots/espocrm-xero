@@ -13,6 +13,7 @@ use Espo\ORM\Entity;
 
 use DateTime;
 use Exception;
+use Throwable;
 
 class XeroService
 {
@@ -201,6 +202,36 @@ class XeroService
     }
 
     // -------------------------------------------------------------------------
+    // Sync audit log
+    // -------------------------------------------------------------------------
+
+    /**
+     * Writes one XeroSyncLog row. Never throws — a logging failure must not
+     * interrupt a sync operation.
+     */
+    private function writeLog(
+        string $direction,
+        string $recordType,
+        string $recordId,
+        string $recordName,
+        string $status,
+        string $message = ''
+    ): void {
+        try {
+            $log = $this->entityManager->getNewEntity('XeroSyncLog');
+            $log->set('direction', $direction);
+            $log->set('recordType', $recordType);
+            $log->set('recordId', $recordId);
+            $log->set('recordName', $recordName);
+            $log->set('status', $status);
+            $log->set('message', $message);
+            $this->entityManager->saveEntity($log);
+        } catch (Throwable $e) {
+            $this->log->warning('XeroSyncLog write failed: ' . $e->getMessage());
+        }
+    }
+
+    // -------------------------------------------------------------------------
     // Date parsing — Xero uses /Date(ms+offset)/ format in some fields
     // -------------------------------------------------------------------------
 
@@ -284,29 +315,39 @@ class XeroService
      */
     public function upsertContact(string $entityType, Entity $entity): void
     {
-        $payload = $this->buildContactPayload($entityType, $entity);
+        $entityId   = (string) ($entity->getId() ?? '');
+        $entityName = (string) ($entity->get('name') ?? '');
 
-        $xeroId = $entity->get('xeroContactId');
+        try {
+            $payload = $this->buildContactPayload($entityType, $entity);
 
-        if ($xeroId) {
-            $payload['ContactID'] = $xeroId;
+            $xeroId = $entity->get('xeroContactId');
+
+            if ($xeroId) {
+                $payload['ContactID'] = $xeroId;
+            }
+
+            $url = $this->apiUrl('Contacts');
+            $result = $this->request('POST', $url, ['Contacts' => [$payload]]);
+
+            $contact = $result['Contacts'][0] ?? null;
+
+            if (!$contact) {
+                throw new Error("Xero: Unexpected response from contact upsert.");
+            }
+
+            $now = (new DateTime())->format(DateTimeUtil::SYSTEM_DATE_TIME_FORMAT);
+
+            $entity->set('xeroContactId', $contact['ContactID'] ?? null);
+            $entity->set('xeroSyncedAt', $now);
+
+            $this->entityManager->saveEntity($entity, ['skipXeroSync' => true, 'silent' => true]);
+
+            $this->writeLog('push', $entityType, $entityId, $entityName, 'success');
+        } catch (Throwable $e) {
+            $this->writeLog('push', $entityType, $entityId, $entityName, 'error', $e->getMessage());
+            throw $e;
         }
-
-        $url = $this->apiUrl('Contacts');
-        $result = $this->request('POST', $url, ['Contacts' => [$payload]]);
-
-        $contact = $result['Contacts'][0] ?? null;
-
-        if (!$contact) {
-            throw new Error("Xero: Unexpected response from contact upsert.");
-        }
-
-        $now = (new DateTime())->format(DateTimeUtil::SYSTEM_DATE_TIME_FORMAT);
-
-        $entity->set('xeroContactId', $contact['ContactID'] ?? null);
-        $entity->set('xeroSyncedAt', $now);
-
-        $this->entityManager->saveEntity($entity, ['skipXeroSync' => true, 'silent' => true]);
     }
 
     // -------------------------------------------------------------------------
@@ -397,29 +438,39 @@ class XeroService
      */
     public function upsertInvoice(Entity $invoice): void
     {
-        $payload = $this->buildInvoicePayload($invoice);
+        $invoiceId   = (string) ($invoice->getId() ?? '');
+        $invoiceName = (string) ($invoice->get('name') ?? '');
 
-        $xeroId = $invoice->get('xeroInvoiceId');
+        try {
+            $payload = $this->buildInvoicePayload($invoice);
 
-        if ($xeroId) {
-            $payload['InvoiceID'] = $xeroId;
+            $xeroId = $invoice->get('xeroInvoiceId');
+
+            if ($xeroId) {
+                $payload['InvoiceID'] = $xeroId;
+            }
+
+            $url = $this->apiUrl('Invoices');
+            $result = $this->request('POST', $url, ['Invoices' => [$payload]]);
+
+            $xeroInvoice = $result['Invoices'][0] ?? null;
+
+            if (!$xeroInvoice) {
+                throw new Error("Xero: Unexpected response from invoice upsert.");
+            }
+
+            $now = (new DateTime())->format(DateTimeUtil::SYSTEM_DATE_TIME_FORMAT);
+
+            $invoice->set('xeroInvoiceId', $xeroInvoice['InvoiceID'] ?? null);
+            $invoice->set('xeroSyncedAt', $now);
+
+            $this->entityManager->saveEntity($invoice, ['skipXeroSync' => true, 'silent' => true]);
+
+            $this->writeLog('push', 'Invoice', $invoiceId, $invoiceName, 'success');
+        } catch (Throwable $e) {
+            $this->writeLog('push', 'Invoice', $invoiceId, $invoiceName, 'error', $e->getMessage());
+            throw $e;
         }
-
-        $url = $this->apiUrl('Invoices');
-        $result = $this->request('POST', $url, ['Invoices' => [$payload]]);
-
-        $xeroInvoice = $result['Invoices'][0] ?? null;
-
-        if (!$xeroInvoice) {
-            throw new Error("Xero: Unexpected response from invoice upsert.");
-        }
-
-        $now = (new DateTime())->format(DateTimeUtil::SYSTEM_DATE_TIME_FORMAT);
-
-        $invoice->set('xeroInvoiceId', $xeroInvoice['InvoiceID'] ?? null);
-        $invoice->set('xeroSyncedAt', $now);
-
-        $this->entityManager->saveEntity($invoice, ['skipXeroSync' => true, 'silent' => true]);
     }
 
     /**
@@ -435,14 +486,24 @@ class XeroService
             return;
         }
 
-        $url = $this->apiUrl('Invoices');
+        $invoiceId   = (string) ($invoice->getId() ?? '');
+        $invoiceName = (string) ($invoice->get('name') ?? '');
 
-        $this->request('POST', $url, [
-            'Invoices' => [[
-                'InvoiceID' => $xeroId,
-                'Status' => 'VOIDED',
-            ]],
-        ]);
+        try {
+            $url = $this->apiUrl('Invoices');
+
+            $this->request('POST', $url, [
+                'Invoices' => [[
+                    'InvoiceID' => $xeroId,
+                    'Status' => 'VOIDED',
+                ]],
+            ]);
+
+            $this->writeLog('push', 'Invoice', $invoiceId, $invoiceName, 'success', 'Voided');
+        } catch (Throwable $e) {
+            $this->writeLog('push', 'Invoice', $invoiceId, $invoiceName, 'error', $e->getMessage());
+            throw $e;
+        }
     }
 
     // -------------------------------------------------------------------------
@@ -496,6 +557,15 @@ class XeroService
             $invoice->set('xeroPaymentDate', $payment['Date'] ?? null);
 
             $this->entityManager->saveEntity($invoice, ['skipXeroSync' => true, 'silent' => true]);
+
+            $this->writeLog(
+                'pull',
+                'Invoice',
+                (string) ($invoice->getId() ?? ''),
+                (string) ($invoice->get('name') ?? ''),
+                'success',
+                'Marked Paid via Xero Payment ' . ($payment['PaymentID'] ?? '')
+            );
         }
     }
 
@@ -585,6 +655,14 @@ class XeroService
             $account->set('xeroSyncedAt', (new DateTime())->format(DateTimeUtil::SYSTEM_DATE_TIME_FORMAT));
 
             $this->entityManager->saveEntity($account, ['skipXeroSync' => true, 'silent' => true]);
+
+            $this->writeLog(
+                'pull',
+                'Account',
+                (string) ($account->getId() ?? ''),
+                (string) ($account->get('name') ?? ''),
+                'success'
+            );
         }
     }
 }
